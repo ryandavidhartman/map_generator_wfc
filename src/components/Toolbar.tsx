@@ -1,4 +1,5 @@
-import { useMapDispatch, useMapState } from '../state/MapContext'
+import { useMapState } from '../state/MapContext'
+import { CampaignMenu } from './CampaignMenu'
 
 type ToolbarProps = {
   gmView?: boolean
@@ -10,21 +11,12 @@ type ToolbarProps = {
 
 export function Toolbar({ gmView, onToggleGmView, view3d, onToggleView3d, growing }: ToolbarProps) {
   const state = useMapState()
-  const dispatch = useMapDispatch()
-
-  function handleNewMap() {
-    if (state.partyHexId && !window.confirm('Start a new map? This clears the current one.')) {
-      return
-    }
-    dispatch({ type: 'NEW_MAP' })
-  }
 
   return (
     <header className="toolbar">
       <h1>OSR Hex Crawl Generator</h1>
       <div className="toolbar-actions">
         {growing && <span className="toolbar-seed">Extending the map…</span>}
-        {state.world && <span className="toolbar-seed">World seed {state.world.seed}</span>}
         {state.partyHexId && onToggleView3d && (
           <button
             type="button"
@@ -47,11 +39,7 @@ export function Toolbar({ gmView, onToggleGmView, view3d, onToggleView3d, growin
             GM view: {gmView ? 'on' : 'off'}
           </button>
         )}
-        {state.partyHexId && (
-          <button type="button" onClick={handleNewMap}>
-            New Map
-          </button>
-        )}
+        {state.partyHexId && <CampaignMenu />}
       </div>
     </header>
   )

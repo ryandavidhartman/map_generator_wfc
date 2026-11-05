@@ -46,6 +46,16 @@ export function randomWorldSeed(): number {
   return Math.floor(Math.random() * 4294967296)
 }
 
+// The new-campaign dialog's seed field (M8): blank for a random world, a whole number as it is
+// (wrapped to 32 bits), or any other text hashed, so a word like "dragonmarch" is a seed too.
+// The same text always gives the same world.
+export function seedFromText(text: string): number {
+  const t = text.trim()
+  if (t === '') return randomWorldSeed()
+  if (/^\d+$/.test(t)) return Number(BigInt(t) % 4294967296n)
+  return mixSeed(...[...t].map((c) => c.codePointAt(0)!))
+}
+
 export async function createStartingWorld(
   seed: number,
   terrain: Terrain,

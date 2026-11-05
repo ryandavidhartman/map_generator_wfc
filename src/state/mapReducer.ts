@@ -105,6 +105,9 @@ export type MapAction =
   | { type: 'GENERATE_SITE'; hexId: string; rng?: Rng }
   | { type: 'REROLL_SITE'; hexId: string; rng?: Rng }
   | { type: 'NEW_MAP' }
+  // Replace the campaign with one loaded from a file (persistence/localStorage.ts
+  // campaignFromJson has already checked it).
+  | { type: 'LOAD_MAP'; state: MapState }
 
 export function isRevealed(state: MapState, id: string): boolean {
   return id in state.hexes
@@ -256,6 +259,9 @@ export function mapReducer(state: MapState, action: MapAction): MapState {
 
     case 'NEW_MAP':
       return EMPTY_MAP_STATE
+
+    case 'LOAD_MAP':
+      return withMapStateDefaults(action.state)
 
     default:
       return state

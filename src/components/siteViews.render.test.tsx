@@ -10,6 +10,7 @@ import { MemoryRouter } from 'react-router-dom'
 import App from '../App'
 import { HexSiteContent } from './hexdetail/HexSiteContent'
 import { HexGridSvg } from '../render2d/HexGridSvg'
+import { MapExportSvg } from '../render2d/MapExportSvg'
 import { MapProvider } from '../state/MapContext'
 import { EMPTY_MAP_STATE, mapReducer, type Hex, type MapState } from '../state/mapReducer'
 import { ALL_TERRAINS, type Terrain } from '../data/tables'
@@ -170,6 +171,25 @@ describe('overland map', () => {
     const ids = new Set([...Object.keys(tiles), ...computeVisibleCoords(Object.values(state.hexes)).map(({ q, r }) => `${q},${r}`)])
     expect(count(html, 'data-hex-id=')).toBe(ids.size)
     expect(html).toContain('<title>Unrevealed: ')
+  })
+
+  it('exports the player map (seen hexes only) and the GM map (all solved hexes) as standalone SVG', () => {
+    const base = walkedMap(3)
+    const tiles = Object.fromEntries(Object.entries(base.tiles).filter(([id]) => id.split(',').every((n) => Math.abs(Number(n)) <= 6)))
+    const state = { ...base, tiles }
+    const player = renderToString(<MapExportSvg state={state} gmView={false} />)
+    const gm = renderToString(<MapExportSvg state={state} gmView={true} />)
+    expectCleanMarkup(player)
+    expectCleanMarkup(gm)
+    expect(player).toMatch(/^<svg xmlns="http:\/\/www.w3.org\/2000\/svg" width="[\d.]+" height="[\d.]+"/)
+    const revealed = Object.values(state.hexes).map(({ q, r }) => ({ q, r }))
+    expect(count(player, 'data-hex-id=')).toBe(computeVisibleCoords(revealed).length)
+    expect(count(gm, 'data-hex-id=')).toBeGreaterThan(count(player, 'data-hex-id='))
+    expect(player).not.toContain('Unrevealed:')
+    expect(gm).toContain('Unrevealed:')
+    // Cropped to its content: the player map is far smaller than the GM map.
+    const width = (svg: string) => Number(svg.match(/width="([\d.]+)"/)![1])
+    expect(width(player)).toBeLessThan(width(gm))
   })
 
   it('marks a tile mismatch in GM view only', () => {

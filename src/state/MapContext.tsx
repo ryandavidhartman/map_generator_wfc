@@ -1,9 +1,11 @@
-import { createContext, useContext, useEffect, useReducer, type Dispatch, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useReducer, useState, type Dispatch, type ReactNode } from 'react'
 import { mapReducer, withMapStateDefaults, type MapAction, type MapState } from './mapReducer'
-import { loadMapState, saveMapState } from '../persistence/localStorage'
+import { loadMapState, saveMapState, type SaveResult } from '../persistence/localStorage'
 
 const MapStateContext = createContext<MapState | null>(null)
 const MapDispatchContext = createContext<Dispatch<MapAction> | null>(null)
+// The last save's outcome and size (null when not persisting).
+const SaveInfoContext = createContext<SaveResult | null>(null)
 
 function initMapState(): MapState {
   // See withMapStateDefaults for why a loaded save is merged over the empty state.
@@ -25,13 +27,17 @@ export function MapProvider({
 }) {
   const [state, dispatch] = useReducer(mapReducer, undefined, () => initialState ?? initMapState())
 
+  const [saveInfo, setSaveInfo] = useState<SaveResult | null>(null)
+
   useEffect(() => {
-    if (persist) saveMapState(state)
+    if (persist) setSaveInfo(saveMapState(state))
   }, [state, persist])
 
   return (
     <MapStateContext.Provider value={state}>
-      <MapDispatchContext.Provider value={dispatch}>{children}</MapDispatchContext.Provider>
+      <MapDispatchContext.Provider value={dispatch}>
+        <SaveInfoContext.Provider value={saveInfo}>{children}</SaveInfoContext.Provider>
+      </MapDispatchContext.Provider>
     </MapStateContext.Provider>
   )
 }
@@ -46,4 +52,8 @@ export function useMapDispatch(): Dispatch<MapAction> {
   const dispatch = useContext(MapDispatchContext)
   if (!dispatch) throw new Error('useMapDispatch must be used within a MapProvider')
   return dispatch
+}
+
+export function useSaveInfo(): SaveResult | null {
+  return useContext(SaveInfoContext)
 }

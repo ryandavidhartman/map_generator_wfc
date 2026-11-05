@@ -5,7 +5,7 @@ felixturner/hex-map-wfc) generates the overland map. Clicking into a hex opens t
 site generators forked from `~/dev/source/map_generator`.
 
 **The plan, the decisions and the milestones are in `docs/PLAN.md`, which is committed.**
-Read it first. Status (2026-11-05): **M0-M7 done.**
+Read it first. Status (2026-11-05): **M0-M8 done.**
 - M0: map_generator forked in. The save key is renamed to `wfc-hex-crawl:map`, so this
   app's saves stay separate from map_generator's on localhost:5173.
 - M1: the WFC solver is ported to TypeScript in `src/wfc/` (see PLAN.md's M1 entry for what
@@ -34,7 +34,12 @@ Read it first. Status (2026-11-05): **M0-M7 done.**
 - M7: GM terrain edits reshape the tile (`src/world/pin.ts`), re-solving unrevealed hexes
   within 2-4; a `tileMismatch` flag when nothing fits.
 
-M8 (saving and polish) is next. The suite
+- M8: Campaign menu (save meter, save to / load from file, player and GM PNG exports), seed
+  field, and an old-save notice.
+
+All PLAN.md milestones are done. Still unchecked: the 3D view on real WebGPU. Open: open
+questions 2 (hex scale) and 3 (roads as game data), punch-list 1b/1c (town-map river bends,
+combined water), and the carried-over punch-list items 2-9. The suite
 takes about 25-30 s, mostly the WFC and world tests.
 
 `docs/reference/map_generator-CLAUDE.md` is a snapshot of map_generator's CLAUDE.md as of the

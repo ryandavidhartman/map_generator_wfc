@@ -501,8 +501,25 @@ unrevealed hexes ahead of the party from GM view can come later.
   revealed land and a Mountain edit beside it both ended as mismatches with the note, the 2D
   dashed hex and the 3D ring; no revealed tile changed.
 
-**M8 — Saving and polish.** Versioned save, an approximate size meter, new-campaign dialog
+**M8 — Saving and polish. ✅ Done 2026-11-05.** Versioned save, an approximate size meter, new-campaign dialog
 (seed, starting terrain), and a PNG export of the 2D map.
+Decisions (user, 2026-11-05): PNG export in two versions (player and GM); add saving the
+campaign to a file and loading it back.
+- The save was already versioned (M3). New: a notice on the start screen when a save from an
+  older format couldn't be loaded, instead of silently starting fresh.
+- **Campaign menu** (toolbar): world seed; a save meter (characters stored against the ~5
+  million browsers allow; amber from 70%, and a warning if a save fails); Save to file (the
+  save as JSON, named `hex-crawl-<seed>-<date>.json`); Load from file (checked: valid JSON, a
+  campaign, this format, complete; confirms before replacing a campaign; `LOAD_MAP`); the two
+  PNG exports; New map. Load from file is on the start screen too.
+- **New-campaign dialog:** an optional seed, a whole number or any word (hashed), blank for
+  random (`seedFromText`).
+- **PNG export** (`render2d/MapExportSvg.tsx`, `exportPng.tsx`): the 2D map drawn with the same
+  HexTile, cropped to its content, at 2x for printing (capped at 8,000 px a side). Player map:
+  revealed hexes and their frontier; GM map: every solved hex, unrevealed dimmed.
+- A 7-chunk campaign saves as about 26 kB, so storage is far from a limit in normal play.
+- 9 new tests (1,147 in all). Browser check: a word seed, the menu, save to file, both PNGs
+  (746 x 672 and 6,012 x 6,192 px), New map, and loading the file back (identical campaign).
 
 ## From map_generator's punch list
 

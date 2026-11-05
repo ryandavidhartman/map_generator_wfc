@@ -2,13 +2,9 @@ import { useEffect, useMemo, useRef, useState, type PointerEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMapDispatch, useMapState } from '../state/MapContext'
 import { isRevealableNow } from '../state/mapReducer'
-import { axialToPixel, computeVisibleCoords, hexId, parseHexId, type AxialCoord } from '../hexgrid/hexMath'
-import { fieldsFor } from '../world/fields'
-import { placedTileAt } from '../world/hexTiles'
-import { deriveHexGeo, type HexGeo } from '../world/terrain'
+import { axialToPixel, hexId, parseHexId, type AxialCoord } from '../hexgrid/hexMath'
 import { HexTile } from './HexTile'
-
-const HEX_SIZE = 40
+import { geoByHex, HEX_SIZE, mapCoords } from './mapData'
 const HEX_WIDTH = HEX_SIZE * Math.sqrt(3) // pointy-top: one hex step east
 const INITIAL_VIEW_HEXES = 16 // hexes across the first view, centered on the party
 const MIN_VIEW_HEXES = 4
@@ -32,19 +28,8 @@ export function HexGridSvg({ gmView = false }: { gmView?: boolean }) {
   const svgRef = useRef<SVGSVGElement>(null)
   const dragOrigin = useRef<{ x: number; y: number } | null>(null)
   // Every solved hex's geography, worked out from its tile (only when the tiles change).
-  const geo = useMemo(() => {
-    const out = new Map<string, HexGeo>()
-    if (!state.world) return out
-    const fields = fieldsFor(state.world)
-    for (const id of Object.keys(state.tiles)) out.set(id, deriveHexGeo(placedTileAt(state.tiles, id)!, fields))
-    return out
-  }, [state.world, state.tiles])
-  const coords = useMemo(() => {
-    const visible = computeVisibleCoords(Object.values(state.hexes).map((hex) => ({ q: hex.q, r: hex.r })))
-    if (!gmView) return visible
-    const ids = new Set(visible.map(hexId))
-    return [...visible, ...Object.keys(state.tiles).filter((id) => !ids.has(id)).map(parseHexId)]
-  }, [state.hexes, state.tiles, gmView])
+  const geo = useMemo(() => geoByHex(state), [state.world, state.tiles]) // eslint-disable-line react-hooks/exhaustive-deps
+  const coords = useMemo(() => mapCoords(state, gmView), [state.hexes, state.tiles, gmView]) // eslint-disable-line react-hooks/exhaustive-deps
   // Set once per mount (lazy initializer), not on every reveal: re-centering every time the
   // party moves would keep yanking the view out from under a GM who has panned or zoomed.
   const [viewBox, setViewBox] = useState<ViewBox>(() =>
