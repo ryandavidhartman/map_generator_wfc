@@ -213,6 +213,16 @@ describe('routes', () => {
     expect(html).toContain(`data-hex-id="${HEX_ID}"`)
   })
 
+  it('/ opens the 3D view when that was the last view used (loaded lazily, so a static render shows its placeholder)', () => {
+    const { state } = stateForFeature(31, 'Grassland', 7, 2)
+    vi.stubGlobal('localStorage', memoryStorage({ 'wfc-hex-crawl:map': JSON.stringify(state), 'wfc-hex-crawl:view3d': '1' }))
+    const html = renderRoute('/')
+    expectCleanMarkup(html)
+    expect(html).toContain('Loading the 3D map')
+    expect(html).toContain('3D<!-- --> map')
+    expect(html).not.toContain('data-hex-id')
+  })
+
   it('/hex/:id renders a saved hex\'s site, and a missing hex says so', () => {
     const { state, hex } = stateForFeature(150, 'Grassland', 3, 2) // 150 = Village
     expect(hex.site?.kind).toBe('settlement')

@@ -59,3 +59,14 @@ the source gives none (noted in each file's header comment), and some sub-tables
 The procedural map generation is adapted from
 [hex-map-wfc](https://github.com/felixturner/hex-map-wfc), © 2026 Felix Turner, used under
 the MIT License. Files ported from it keep the MIT notice in their header.
+
+The 3D map's renderer (`src/render3d/`) is also adapted from hex-map-wfc, under the same MIT
+License. Its assets in `public/assets/` come from hex-map-wfc's repository:
+
+- `models/hex-terrain.glb`: tile models from the
+  [KayKit Medieval Hexagon Pack](https://kaylousberg.itch.io/kaykit-medieval-hexagon) by Kay
+  Lousberg (CC0), with additional tiles (sloping rivers, river ends, river-to-coast and cliff
+  variants) by Felix Turner (MIT).
+- `textures/moody.png`, `textures/winter.png`: palette textures by Felix Turner (MIT).
+- `hdr/venice_sunset_1k.hdr`: the "Venice Sunset" HDRI from [Poly Haven](https://polyhaven.com)
+  (CC0).

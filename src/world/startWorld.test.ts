@@ -26,7 +26,14 @@ describe('createStartingWorld', () => {
     expect(progress.at(-1)).toBe(6)
   }, 20000)
 
-  it('starts at sea for Ocean', async () => {
+  it('picks the start from the finished map, not from chunk 0 before the ring was solved', async () => {
+    // Regression (found in the M4 browser check): with this seed, solving the ring re-solved
+    // hex (-5,1) in chunk 0 from Hills to Swamp, and the old code still started there.
+    const start = await createStartingWorld(2891736572, 'Hills', solveHere)
+    expect(geoAt(start.world, start.tiles, start.startHexId)?.terrain).toBe('Hills')
+  }, 20000)
+
+    it('starts at sea for Ocean', async () => {
     const start = await createStartingWorld(5, 'Ocean', solveHere)
     expect(geoAt(start.world, start.tiles, start.startHexId)?.terrain).toBe('Ocean')
   }, 20000)

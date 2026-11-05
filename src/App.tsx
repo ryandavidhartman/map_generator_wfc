@@ -1,6 +1,6 @@
 import './App.css'
 import { Routes, Route } from 'react-router-dom'
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { HexGridSvg } from './render2d/HexGridSvg'
 import { StartMapDialog } from './components/StartMapDialog'
 import { Toolbar } from './components/Toolbar'
@@ -9,31 +9,36 @@ import { HexDetailPage } from './routes/HexDetailPage'
 import { PoiReviewPage } from './routes/PoiReviewPage'
 import { MapProvider, useMapState } from './state/MapContext'
 
-const GM_VIEW_KEY = 'wfc-hex-crawl:gmView'
+// Three.js and the 3D models load only when the 3D view is first opened.
+const ThreeMapView = lazy(() => import('./render3d/ThreeMapView'))
 
-// GM view is a per-browser viewing preference, not campaign data, so it's kept apart from the save.
-function loadGmView(): boolean {
-  try {
-    return localStorage.getItem(GM_VIEW_KEY) === '1'
-  } catch {
-    return false
+// GM view and 2D/3D are per-browser viewing preferences, not campaign data, so they're kept
+// apart from the save.
+function usePreference(key: string): [boolean, () => void] {
+  const [on, setOn] = useState(() => {
+    try {
+      return localStorage.getItem(key) === '1'
+    } catch {
+      return false
+    }
+  })
+  function toggle() {
+    setOn((was) => {
+      try {
+        localStorage.setItem(key, was ? '0' : '1')
+      } catch {
+        // storage unavailable: the toggle still works for this session
+      }
+      return !was
+    })
   }
+  return [on, toggle]
 }
 
 function OverlandMapScreen() {
   const state = useMapState()
-  const [gmView, setGmView] = useState(loadGmView)
-
-  function toggleGmView() {
-    setGmView((on) => {
-      try {
-        localStorage.setItem(GM_VIEW_KEY, on ? '0' : '1')
-      } catch {
-        // storage unavailable: the toggle still works for this session
-      }
-      return !on
-    })
-  }
+  const [gmView, toggleGmView] = usePreference('wfc-hex-crawl:gmView')
+  const [view3d, toggleView3d] = usePreference('wfc-hex-crawl:view3d')
 
   if (!state.partyHexId) {
     return (
@@ -48,10 +53,16 @@ function OverlandMapScreen() {
 
   return (
     <>
-      <Toolbar gmView={gmView} onToggleGmView={toggleGmView} />
+      <Toolbar gmView={gmView} onToggleGmView={toggleGmView} view3d={view3d} onToggleView3d={toggleView3d} />
       <div className="app-body">
         <div className="map-area">
-          <HexGridSvg gmView={gmView} />
+          {view3d ? (
+            <Suspense fallback={<div className="three-map-status">Loading the 3D map…</div>}>
+              <ThreeMapView gmView={gmView} />
+            </Suspense>
+          ) : (
+            <HexGridSvg gmView={gmView} />
+          )}
           <Legend />
         </div>
       </div>

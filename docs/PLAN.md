@@ -325,11 +325,52 @@ and solved 3 chunks (651 tiles, no mismatches or drops). Changes to M1's `wfc/` 
   Forest/jungle, Desert/arctic, Mountain and Ocean; walking reveals hexes with tile terrain;
   GM view draws all 1,519 tiles; double-click opens the hex detail page.
 
-**M4 — 3D map.** Port the renderer, decorations, water, lighting and post-processing into
-`render3d/`. Add biome tinting (Swamp/Desert on grass tiles), forest trees driven by biome,
-fog of war (hide or cloud unrevealed tiles; dim them in GM view), party and POI markers, and
-picking. Add the 2D/3D toggle. Fall back to WebGL2 when WebGPU is missing (Three.js's
-`WebGPURenderer` can do this; check the TSL effects, and turn off post-processing if needed).
+**M4 — 3D map.** Split in two (user, 2026-11-05):
+
+**M4a — Playable 3D map. ✅ Done 2026-11-05.** Port the tile renderer (models from the GLB, placed per hex), lighting
+and camera into `render3d/`, lazy-loaded. Biome tinting (Swamp, Desert/arctic, Forest… on grass
+tiles), party and POI markers, picking (click moves the party, double-click opens the hex), and
+the 2D/3D toggle. Decisions (2026-11-05):
+- **Fog: grey silhouettes.** In player view, unrevealed solved tiles are drawn as flat, unlit
+  grey shapes (the land's outline shows, no color or detail); the clickable frontier is
+  highlighted. GM view draws them in full color, dimmed, as in 2D.
+- **Camera:** hex-map-wfc's orbit controls (pan, zoom, rotate and tilt, tilt limited).
+- **View choice:** remembered per browser, starting with 2D, like the GM view toggle.
+- Fall back to WebGL2 when WebGPU is missing (Three.js's `WebGPURenderer` does this).
+- KayKit Medieval Hexagon Pack license checked 2026-11-05: **CC0** ("free for personal and
+  commercial use, no attribution required"; don't resell unmodified copies). Credited anyway.
+
+Built (`src/render3d/`): `layout.ts` (pure: placement, looks, the instance-color encoding,
+`tileDraws`), `tileMaterial.ts` (TSL), `MapScene.ts` (Three.js), `ThreeMapView.tsx` (React,
+lazy). Three.js 0.183.2, as hex-map-wfc. The 3D chunk is 930 kB (258 kB gzipped) and loads
+only when the 3D view opens; the main bundle didn't grow. What's worth knowing:
+- One BatchedMesh for the whole map (1,519 tiles plus fills under raised tiles).
+- **Palette blend starts at level 2** (hex-map-wfc blends from level 0). This world sits higher
+  (most land at levels 1-3), and blending from 0 washed ordinary land toward the snowy palette.
+  Now Hills (level 3) are half snow and Mountains (level 4) full.
+- **Biome tints** recolor only the palette's grass swatch (UV column 0, row 2), so roads,
+  rivers, sand and water keep their colors. Desert/arctic is sand when the temperature field is
+  warm and snow when it's cold.
+- **Fog silhouettes** are unlit: land mid grey, sea dark grey. Rivers aren't shown (only tiles
+  with open-water edges darken their water), so the silhouette gives away coastlines and
+  relief but not rivers. The party's unrevealed neighbors are a lighter grey.
+- Markers: a white pawn for the party, a yellow gem per POI, danger-colored hex rings on
+  revealed hexes and a white ring on the selected one. Left-drag pans, right-drag rotates,
+  wheel zooms. A click that doesn't drag moves the party; a double click opens the hex.
+- The scene draws only when something changed (camera, data, size). Drawing every frame kept
+  the main thread busy enough under software rendering that clicks were handled late.
+- **Bug fix (M3's start search):** solving the six ring chunks can re-solve cells inside
+  chunk 0, so a start hex chosen right after chunk 0 could change terrain (seen: Hills became
+  Swamp). The start is now picked from the finished tiles. Regression test with that seed.
+- 11 new tests (1,100 in all). Browser check (production build, headless Chromium, which has no
+  WebGPU here, so on the WebGL2 fallback with software rendering): the 3D view opens in
+  0.6-5 s; player view, GM view, a tilted close-up; click moves the party, double-click opens
+  the hex page, drag pans without moving it; Hills and Desert/arctic starts.
+- Not checked: a real WebGPU browser (the headless one has none). Worth a look on your machine.
+
+**M4b — 3D polish.** Animated water (caustics, coastal waves), decorations (forest trees driven
+by biome, buildings, rocks), post-processing (ambient occlusion, depth of field, vignette, grain;
+off if the WebGL2 fallback can't run them).
 
 **M5 — Chunk growth.** Background solve near edges, triggered early enough that revealed
 hexes never border an unsolved chunk (section 4). `isLocked` from M1 enforces the

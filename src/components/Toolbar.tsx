@@ -1,6 +1,13 @@
 import { useMapDispatch, useMapState } from '../state/MapContext'
 
-export function Toolbar({ gmView, onToggleGmView }: { gmView?: boolean; onToggleGmView?: () => void }) {
+type ToolbarProps = {
+  gmView?: boolean
+  onToggleGmView?: () => void
+  view3d?: boolean
+  onToggleView3d?: () => void
+}
+
+export function Toolbar({ gmView, onToggleGmView, view3d, onToggleView3d }: ToolbarProps) {
   const state = useMapState()
   const dispatch = useMapDispatch()
 
@@ -16,6 +23,17 @@ export function Toolbar({ gmView, onToggleGmView }: { gmView?: boolean; onToggle
       <h1>OSR Hex Crawl Generator</h1>
       <div className="toolbar-actions">
         {state.world && <span className="toolbar-seed">World seed {state.world.seed}</span>}
+        {state.partyHexId && onToggleView3d && (
+          <button
+            type="button"
+            className={view3d ? 'active' : undefined}
+            aria-pressed={view3d}
+            title="Switch between the flat 2D map and the 3D map"
+            onClick={onToggleView3d}
+          >
+            {view3d ? '3D' : '2D'} map
+          </button>
+        )}
         {state.partyHexId && onToggleGmView && (
           <button
             type="button"

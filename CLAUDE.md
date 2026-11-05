@@ -5,7 +5,7 @@ felixturner/hex-map-wfc) generates the overland map. Clicking into a hex opens t
 site generators forked from `~/dev/source/map_generator`.
 
 **The plan, the decisions and the milestones are in `docs/PLAN.md`, which is committed.**
-Read it first. Status (2026-11-05): **M0-M3 done.**
+Read it first. Status (2026-11-05): **M0-M3 and M4a done.**
 - M0: map_generator forked in. The save key is renamed to `wfc-hex-crawl:map`, so this
   app's saves stay separate from map_generator's on localhost:5173.
 - M1: the WFC solver is ported to TypeScript in `src/wfc/` (see PLAN.md's M1 entry for what
@@ -18,7 +18,11 @@ Read it first. Status (2026-11-05): **M0-M3 done.**
   hexes from their tiles. The 2D map in `src/render2d/` is pointy-top with rivers, roads, lakes,
   coast shapes and a GM view.
 
-M4 (3D map) is next; M5 (chunk growth) lets the party leave the starting 7 chunks. The suite
+- M4a: the 3D map in `src/render3d/` (lazy-loaded, Three.js 0.183.2): tiles from hex-map-wfc's
+  GLB, biome tints, grey fog silhouettes, markers, picking, and the 2D/3D toggle.
+
+M4b (water, decorations, post-processing) is next; M5 (chunk growth) lets the party leave the
+starting 7 chunks. The suite
 takes about 25-30 s, mostly the WFC and world tests.
 
 `docs/reference/map_generator-CLAUDE.md` is a snapshot of map_generator's CLAUDE.md as of the
@@ -32,6 +36,11 @@ copied.
 - Revealed hexes never change: no WFC re-solve, chunk growth or recovery step may change a
   revealed hex's tile or terrain.
 - `wfc/` and `world/` are pure TypeScript (no Three.js imports), so they're testable in Vitest.
+  In `render3d/`, only `MapScene.ts`, `tileMaterial.ts` and `ThreeMapView.tsx` import Three.js;
+  `layout.ts` stays pure and tested. Keep Three.js out of the main bundle (lazy import only).
+- 3D browser checks: headless Chromium has no WebGPU, so launch it with
+  `--use-angle=swiftshader --enable-unsafe-swiftshader` (WebGL2 fallback) and close each tab
+  after use; open tabs keep rendering and slow everything down.
 - Ported hex-map-wfc files keep Felix Turner's MIT notice in their header, along with a list
   of what changed. Keep both up to date when editing them.
 - Saved maps store tile type ids, which are indexes into `TILE_LIST`. Reordering or removing

@@ -57,14 +57,19 @@ export async function createStartingWorld(
     const world = placeWorld(attempt === 0 ? seed : mixSeed(seed, attempt), terrain === 'Ocean')
     const tiles = await solveInto({}, origin, world, solve)
     fallback ??= { world, tiles }
-    const start = findStartHex(world, tiles, origin, terrain)
-    if (!start) continue
+    // A cheap first check on chunk 0 alone, before solving the ring.
+    if (!findStartHex(world, tiles, origin, terrain)) continue
 
     let grown = tiles
     for (const [n, chunk] of ring.entries()) {
       onProgress({ attempt, chunksSolved: n + 1, chunksTotal: total })
       grown = await solveInto(grown, chunk, world, solve)
     }
+    // Pick the start from the finished tiles: solving the ring can re-solve cells inside
+    // chunk 0 (recovery and river-loop breaking patch across the border), which can change a
+    // hex's terrain.
+    const start = findStartHex(world, grown, origin, terrain)
+    if (!start) continue
     return { world, chunks: [origin, ...ring].map(chunkKey), tiles: grown, startHexId: start, terrainMatched: true }
   }
 
