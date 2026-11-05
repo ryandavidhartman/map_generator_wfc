@@ -11,6 +11,7 @@ const UNREVEALED_FILL_FOG = '#1a1a1a'
 const UNREVEALED_STROKE_REVEALABLE = '#9a9a9a'
 const UNREVEALED_STROKE_FOG = '#2c2c2c'
 const GM_HIDDEN_STROKE = '#00000055'
+const MISMATCH_COLOR = '#ff3b3b'
 const GM_HIDDEN_DIM = 0.45 // opacity of the dark veil over unrevealed hexes in GM view
 
 // Single click moves the party; double click opens the full-view details page. A single
@@ -83,9 +84,10 @@ export function HexTile({ coord, size, hex, geo, showHidden, isParty, isSelected
     stroke = isRevealable ? UNREVEALED_STROKE_REVEALABLE : UNREVEALED_STROKE_FOG
   }
 
+  const mismatch = drawn === 'revealed' && showHidden && hex!.tileMismatch
   const title =
     drawn === 'revealed'
-      ? `${hex!.terrain} · ${hex!.danger} (level ${hex!.dangerLevel})${hex!.poi ? ` · ${hex!.poi.location}` : ''}`
+      ? `${hex!.terrain} · ${hex!.danger} (level ${hex!.dangerLevel})${hex!.poi ? ` · ${hex!.poi.location}` : ''}${mismatch ? ' · tile mismatch' : ''}`
       : drawn === 'hidden'
         ? `Unrevealed: ${geo!.terrain}`
         : isRevealable
@@ -125,6 +127,17 @@ export function HexTile({ coord, size, hex, geo, showHidden, isParty, isSelected
       )}
       {drawn === 'hidden' && <polygon points={outerPoints} fill="#000000" opacity={GM_HIDDEN_DIM} />}
       <polygon points={points} fill="none" stroke={isSelected ? '#ffffff' : stroke} strokeWidth={isSelected ? 3 : 2} />
+      {mismatch && (
+        // GM view: the hex's terrain is a label its tile couldn't be reshaped to (world/pin.ts).
+        <polygon
+          points={hexCornersPointsAttr(center, size * 0.78)}
+          fill="none"
+          stroke={MISMATCH_COLOR}
+          strokeWidth={2.5}
+          strokeDasharray={`${size * 0.12} ${size * 0.08}`}
+          data-tile-mismatch="true"
+        />
+      )}
       {hex?.poi && (
         <>
           <circle cx={center.x} cy={center.y} r={size * 0.3} fill="#ffd54a" stroke="#00000088" strokeWidth={1} />

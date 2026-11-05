@@ -67,8 +67,9 @@ export default function ThreeMapView({ gmView }: { gmView: boolean }) {
         .filter((h) => h.poi)
         .map((h) => h.id),
       danger: Object.values(state.hexes).map((h) => ({ hexId: h.id, danger: h.danger })),
+      mismatchHexIds: gmView ? Object.values(state.hexes).filter((h) => h.tileMismatch).map((h) => h.id) : [],
     }),
-    [state.hexes, state.partyHexId, state.selectedHexId],
+    [state.hexes, state.partyHexId, state.selectedHexId, gmView],
   )
 
   // Rebuild the tiles when the solved map changes (and once the scene is ready).

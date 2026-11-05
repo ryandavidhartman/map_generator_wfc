@@ -76,6 +76,7 @@ export type MarkerView = {
   selectedHexId: string | null
   poiHexIds: string[]
   danger: { hexId: string; danger: keyof typeof DANGER_COLORS }[]
+  mismatchHexIds: string[] // GM view: hexes whose terrain is a label over another tile shape
 }
 
 export type MapSceneCallbacks = {
@@ -607,6 +608,11 @@ export class MapScene {
       g.setAttribute('position', new Float32BufferAttribute(positions, 3))
       g.setAttribute('color', new Float32BufferAttribute(colors, 3))
       this.markers.add(new LineSegments(g, new LineBasicMaterial({ vertexColors: true })))
+    }
+    for (const hexId of view.mismatchHexIds) {
+      const g = new BufferGeometry()
+      g.setAttribute('position', new Float32BufferAttribute(ring(hexId, 0.75, 0.1), 3))
+      this.markers.add(new LineSegments(g, new LineBasicMaterial({ color: 0xff3b3b })))
     }
     if (view.selectedHexId) {
       const g = new BufferGeometry()

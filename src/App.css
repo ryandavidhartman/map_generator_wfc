@@ -517,3 +517,13 @@ button.primary:hover {
   border-radius: 6px;
   padding: 0.5rem 1rem;
 }
+
+.tile-mismatch-note {
+  color: #f87171;
+}
+
+.edit-hint {
+  color: #9ca3af;
+  font-size: 0.85rem;
+  margin: 0 0 0.5rem;
+}

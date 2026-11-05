@@ -172,6 +172,13 @@ describe('overland map', () => {
     expect(html).toContain('<title>Unrevealed: ')
   })
 
+  it('marks a tile mismatch in GM view only', () => {
+    const base = walkedMap(1)
+    const hexes = { ...base.hexes, '1,0': { ...base.hexes['1,0'], tileMismatch: true } }
+    expect(renderMap({ ...base, hexes }, true)).toContain('data-tile-mismatch="true"')
+    expect(renderMap({ ...base, hexes }, false)).not.toContain('data-tile-mismatch')
+  })
+
   it('draws an icon for each point of interest by its kind', () => {
     const base = walkedMap(2)
     const hexes = { ...base.hexes }

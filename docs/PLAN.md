@@ -475,7 +475,31 @@ Built:
   seeded with one POI of every kind shows every glyph in 2D and every model in 3D. Not seen in
   normal play yet, nor on real WebGPU.
 
-**M7 — GM editing.** Pin a tile and re-solve locally, with the mismatch flag.
+**M7 — GM editing. ✅ Done 2026-11-05.** Pin a tile and re-solve locally, with the mismatch flag.
+Decision (user, 2026-11-05): revealed hexes only (from the hex page's Edit form); editing
+unrevealed hexes ahead of the party from GM view can come later.
+- `src/world/pin.ts`: terrains fall into shape classes (Ocean, Coast, Hills, Mountain, and
+  flat land). A change between flat-land biomes is a label only (the biome comes from the
+  world's moisture and temperature; 2D color, 3D tint and scenery follow the hex's terrain).
+  Otherwise the hex's tile is pinned to the wanted class and the unrevealed hexes within 2 are
+  re-solved, widening to 3 and then 4 when nothing fits; everything else is locked, so
+  revealed neighbors never change. If nothing fits, nothing changes and the hex gets
+  `tileMismatch` (its terrain is a label over another shape): a red dashed hex in 2D GM view, a
+  red ring in 3D GM view, and a note on the hex page. Editing back to a fitting terrain clears it.
+- Runs in the reducer on the main thread (the WFC solver is now in the main bundle too): up to
+  ~0.7 s for a big edit.
+- **Measured** (40 hexes in 2 worlds): with only the edited hex revealed, every shape fits
+  (Mountain, Hills, Ocean, Coast: 100%). With one revealed neighbor, Coast fits 29/36, Hills
+  24/35, Mountain 13/40, **Ocean 2/40**: open water needs water or shoreline on all six sides,
+  and a Mountain can't rise from a revealed neighbor's level in one step.
+- **Fallback** (user, 2026-11-05): when the exact shape can't fit, the closest one that does
+  is used, still flagged as a mismatch: Ocean → a shore tile with 3+ water edges, then any
+  shore tile; Mountain → Hills; flat land → shore, then Hills. Same 40 hexes with one revealed
+  neighbor: Ocean now reshapes 33/40 (2 exact, 31 fallback), Mountain 35/40 (13 exact, 22
+  Hills); Coast and Hills have no near shape (9 and 11 stay label-only).
+- 11 new tests (1,139 in all). Browser check through the Edit form: an Ocean edit inside
+  revealed land and a Mountain edit beside it both ended as mismatches with the note, the 2D
+  dashed hex and the 3D ring; no revealed tile changed.
 
 **M8 — Saving and polish.** Versioned save, an approximate size meter, new-campaign dialog
 (seed, starting terrain), and a PNG export of the 2D map.

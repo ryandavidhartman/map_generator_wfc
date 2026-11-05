@@ -11,6 +11,7 @@ import { dangerLevelDelta, type DangerLevel, type Terrain } from '../data/tables
 import { hexId, neighborsOf, parseHexId, type AxialCoord } from '../hexgrid/hexMath'
 import type { WorldParams } from '../world/fields'
 import { applyChunkResult } from '../world/growth'
+import { pinHex } from '../world/pin'
 import { isSettlementAnchor } from '../world/anchors'
 import { geoAt, type SavedTiles } from '../world/hexTiles'
 import type { PlacedTile } from '../wfc/rules'
@@ -28,6 +29,9 @@ export type Hex = {
   dangerLevel: number
   poi?: PointOfInterest
   site?: GeneratedSite
+  // Set when a GM edit gave the hex a terrain its tile couldn't be reshaped to (world/pin.ts):
+  // the terrain is then a label over a tile of another shape. Shown in GM view.
+  tileMismatch?: boolean
 }
 
 // Bumped when the save format changes in a way old saves can't be read with. A save with any
@@ -96,7 +100,8 @@ export type MapAction =
   | { type: 'ADD_CHUNK'; chunk: string; updates: PlacedTile[] }
   | { type: 'SELECT_HEX'; hexId: string }
   | { type: 'REROLL_HEX'; hexId: string; rng?: Rng }
-  | { type: 'EDIT_HEX'; hexId: string; patch: HexEditPatch }
+  // A terrain change also reshapes the hex's tile and the unrevealed hexes near it (world/pin.ts).
+  | { type: 'EDIT_HEX'; hexId: string; patch: HexEditPatch; rng?: Rng }
   | { type: 'GENERATE_SITE'; hexId: string; rng?: Rng }
   | { type: 'REROLL_SITE'; hexId: string; rng?: Rng }
   | { type: 'NEW_MAP' }
@@ -211,14 +216,25 @@ export function mapReducer(state: MapState, action: MapAction): MapState {
       const hex = state.hexes[action.hexId]
       if (!hex) return state
       const patchTouchesPoi = 'poi' in action.patch
+      let tiles = state.tiles
+      let tileMismatch = hex.tileMismatch
+      const terrain = action.patch.terrain
+      if (terrain && terrain !== hex.terrain && state.world && hex.id in state.tiles) {
+        const pin = pinHex(state.world, state.tiles, hex.id, terrain, (id) => id in state.hexes, action.rng ?? Math.random)
+        // An exact fit, or the closest shape that fits (the label then stays a mismatch).
+        if (pin.ok || pin.approximate) tiles = applyChunkResult(state.tiles, pin.updates, (id) => id !== hex.id && id in state.hexes).tiles
+        tileMismatch = pin.ok ? undefined : true
+      }
       return {
         ...state,
+        tiles,
         hexes: {
           ...state.hexes,
           [action.hexId]: {
             ...hex,
             ...action.patch,
             ...(patchTouchesPoi ? { site: undefined } : {}),
+            tileMismatch,
           },
         },
       }

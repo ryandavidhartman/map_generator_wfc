@@ -30,6 +30,12 @@ export function HexBaseInfo({ hex }: { hex: Hex }) {
       <p>
         <strong>Terrain:</strong> {hex.terrain}
       </p>
+      {hex.tileMismatch && (
+        <p className="tile-mismatch-note">
+          Tile mismatch: the map couldn't be reshaped to {hex.terrain} here (its revealed neighbors
+          don't allow it), so {hex.terrain} is a label over the map's own terrain.
+        </p>
+      )}
       <p>
         <strong>Danger:</strong> {hex.danger}
       </p>
@@ -112,6 +118,11 @@ function HexEditForm({ hex, onDone }: { hex: Hex; onDone: () => void }) {
     <div className="hex-edit-form">
       <h2>Edit hex {hex.id}</h2>
 
+      <p className="edit-hint">
+        Changing the terrain reshapes the map here. Ocean, Coast, Hills and Mountain change the
+        hex's tile and re-solve unrevealed hexes nearby; revealed hexes never change. Between
+        Grassland, Forest/jungle, Swamp and Desert/arctic, only the label changes.
+      </p>
       <label>
         Terrain
         <select value={terrain} onChange={(e) => setTerrain(e.target.value as Terrain)}>
