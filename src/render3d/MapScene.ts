@@ -67,6 +67,9 @@ const CAMERA_OFFSET = new Vector3(0, 55, 32) // from the target: about 11 hexes 
 const DOUBLE_CLICK_DELAY_MS = 250
 const CLICK_SLOP_PX = 5
 const MASK_DELAY_FRAMES = 3
+const DROP_HEIGHT = 4
+const DROP_MS = 450
+const DROP_STAGGER_MS = 45 // per hex from the middle of the new area
 
 export type MarkerView = {
   partyHexId: string | null
@@ -174,6 +177,8 @@ export class MapScene {
   private resizeObserver: ResizeObserver | null = null
   private disposed = false
   private worldSeed = 0
+  private drops = new Map<string, number>() // hex id -> when its drop starts (ms)
+  private bases = new Map<string, { x: number; y: number; z: number; rotY: number }>() // resting tile placement
   private maskFrames = 0 // frames until the coast masks are redrawn (0: not pending)
   private dirty = true // draw on the next frame (nothing is drawn while nothing changes)
   private pendingClick: number | null = null
@@ -283,7 +288,20 @@ export class MapScene {
     this.tileInstances.clear()
     this.fillInstances.clear()
     this.instanceHex.clear()
+    // Tiles new since the last build (a grown chunk) drop into place, rippling out from the
+    // middle of the new area. Not on the first build, nor with "reduce motion".
+    const isNew = this.draws.size > 0 ? draws.filter((d) => !this.draws.has(d.id)) : []
     this.draws = new Map(draws.map((d) => [d.id, d]))
+    this.drops.clear()
+    if (this.animate && isNew.length) {
+      const cq = isNew.reduce((a, d) => a + d.q, 0) / isNew.length
+      const cr = isNew.reduce((a, d) => a + d.r, 0) / isNew.length
+      const now = performance.now()
+      for (const d of isNew) {
+        const dist = Math.max(Math.abs(d.q - cq), Math.abs(d.r - cr), Math.abs(d.q + d.r - cq - cr))
+        this.drops.set(d.id, now + dist * DROP_STAGGER_MS)
+      }
+    }
 
     let vertices = 0
     let indices = 0
@@ -321,6 +339,7 @@ export class MapScene {
       this.dummy.updateMatrix()
       mesh.setMatrixAt(id, this.dummy.matrix)
       this.tileInstances.set(d.id, id)
+      this.bases.set(d.id, { x: p.x, y, z: p.z, rotY: rotationAngle(d.rotation) })
       this.instanceHex.set(id, d.id)
       if (d.level >= 1 && bottomId !== null) {
         const fill = mesh.addInstance(bottomId)
@@ -401,7 +420,7 @@ export class MapScene {
       if (decos && this.decoMesh) {
         const fog = d.look.tint === TINT.fog || d.look.tint === TINT.fogFrontier
         for (const deco of decos) {
-          this.decoMesh.setVisibleAt(deco.id, !fog)
+          this.decoMesh.setVisibleAt(deco.id, !fog && !this.drops.has(id))
           const [dr, , db] = instanceColor(deco.level, d.look, false)
           this.decoMesh.setColorAt(deco.id, this.color.setRGB(dr, 1, db))
         }
@@ -454,6 +473,41 @@ export class MapScene {
     }
     this.decoMesh = mesh
     this.scene.add(mesh)
+  }
+
+  // Move dropping tiles (and the fills under them) down to rest; show their decorations when
+  // they land.
+  private stepDrops(): void {
+    const mesh = this.tileMesh
+    if (!mesh) return
+    const now = performance.now()
+    let landed = false
+    for (const [id, startAt] of this.drops) {
+      const t = Math.min(1, Math.max(0, (now - startAt) / DROP_MS))
+      const ease = 1 - (1 - t) ** 3
+      const lift = (1 - ease) * DROP_HEIGHT
+      const b = this.bases.get(id)
+      const tile = this.tileInstances.get(id)
+      if (b && tile !== undefined) {
+        this.dummy.position.set(b.x, b.y + lift, b.z)
+        this.dummy.rotation.set(0, b.rotY, 0)
+        this.dummy.scale.setScalar(t > 0 ? 1 : 0) // hidden until its turn
+        this.dummy.updateMatrix()
+        mesh.setMatrixAt(tile, this.dummy.matrix)
+        const fill = this.fillInstances.get(id)
+        if (fill !== undefined) {
+          this.dummy.rotation.set(0, 0, 0)
+          this.dummy.scale.set(1, b.y, 1).multiplyScalar(t > 0 ? 1 : 0)
+          this.dummy.updateMatrix()
+          mesh.setMatrixAt(fill, this.dummy.matrix)
+        }
+      }
+      if (t >= 1) {
+        this.drops.delete(id)
+        landed = true
+      }
+    }
+    if (landed) this.applyLooks()
   }
 
   // Size the water to the map and redraw the coast masks (after the tiles change).
@@ -572,6 +626,10 @@ export class MapScene {
       this.dirty = true
     }
     if (this.maskFrames > 0) this.dirty = true // keep frames coming until the masks are drawn
+    if (this.drops.size) {
+      this.stepDrops()
+      this.dirty = true
+    }
     if (!moved && !this.dirty && !this.animate) return
     this.dirty = false
     this.updateShadowCamera()

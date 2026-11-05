@@ -14,6 +14,7 @@ export default function ThreeMapView({ gmView }: { gmView: boolean }) {
   const navigate = useNavigate()
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const sceneRef = useRef<MapScene | null>(null)
+  const focused = useRef(false)
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [error, setError] = useState<string | null>(null)
 
@@ -70,14 +71,18 @@ export default function ThreeMapView({ gmView }: { gmView: boolean }) {
     [state.hexes, state.partyHexId, state.selectedHexId],
   )
 
-  // Rebuild the tiles when the solved map changes (and once the scene is ready), then look at
-  // the party.
+  // Rebuild the tiles when the solved map changes (and once the scene is ready).
   useEffect(() => {
     const scene = sceneRef.current
     if (status !== 'ready' || !scene) return
     const st = latest.current.state
     scene.setTiles(tileDraws(st, gmView), st.tiles, st.world?.seed ?? 0)
-    if (latest.current.state.partyHexId) scene.focus(latest.current.state.partyHexId)
+    // Look at the party on the first build only; later builds are grown chunks, and moving
+    // the camera then would pull it away from wherever the GM is looking.
+    if (!focused.current && st.partyHexId) {
+      scene.focus(st.partyHexId)
+      focused.current = true
+    }
     // gmView changes are handled by setView below; only tiles/world rebuild the mesh.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, state.tiles, state.world])

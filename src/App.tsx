@@ -8,6 +8,7 @@ import { Legend } from './components/Legend'
 import { HexDetailPage } from './routes/HexDetailPage'
 import { PoiReviewPage } from './routes/PoiReviewPage'
 import { MapProvider, useMapState } from './state/MapContext'
+import { useChunkGrowth } from './state/useChunkGrowth'
 
 // Three.js and the 3D models load only when the 3D view is first opened.
 const ThreeMapView = lazy(() => import('./render3d/ThreeMapView'))
@@ -39,6 +40,7 @@ function OverlandMapScreen() {
   const state = useMapState()
   const [gmView, toggleGmView] = usePreference('wfc-hex-crawl:gmView')
   const [view3d, toggleView3d] = usePreference('wfc-hex-crawl:view3d')
+  const { growing } = useChunkGrowth()
 
   if (!state.partyHexId) {
     return (
@@ -53,7 +55,7 @@ function OverlandMapScreen() {
 
   return (
     <>
-      <Toolbar gmView={gmView} onToggleGmView={toggleGmView} view3d={view3d} onToggleView3d={toggleView3d} />
+      <Toolbar gmView={gmView} onToggleGmView={toggleGmView} view3d={view3d} onToggleView3d={toggleView3d} growing={growing} />
       <div className="app-body">
         <div className="map-area">
           {view3d ? (

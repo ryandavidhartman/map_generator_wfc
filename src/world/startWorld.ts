@@ -22,7 +22,12 @@ import { deriveHexGeo } from './terrain'
 
 // Solves one chunk against the store's tiles and resolves with the result (doesn't change the
 // store). The app uses the Web Worker (workerSolver.ts); tests call the solver directly.
-export type ChunkSolver = (store: TileStore, chunk: ChunkCoord, world: WorldParams) => Promise<SolveChunkResponse>
+export type ChunkSolver = (
+  store: TileStore,
+  chunk: ChunkCoord,
+  world: WorldParams,
+  lockedKeys?: string[], // cube keys the solve must not change (revealed hexes)
+) => Promise<SolveChunkResponse>
 
 export const START_SEED_ATTEMPTS = 12
 

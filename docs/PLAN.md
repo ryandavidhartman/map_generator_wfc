@@ -147,8 +147,10 @@ spread between worlds is wide by design: some are wetter, colder or more mountai
   limit, so the map is unbounded. (hex-map-wfc instead positions its 19 grids with a
   world-space walk.)
 - The worker solves a neighboring chunk in the background **before any revealed hex touches
-  unsolved ground**. Trigger it when the party is within about 4 hexes of an unsolved area;
-  then revealed hexes are at least 2 hexes from the new chunk. They can't be boundary cells,
+  unsolved ground**. Built in M5 (`src/world/growth.ts`): every hex within 8 of the party
+  (`GROW_RADIUS`) must be solved, so after any step the nearest unsolved hex is at least 8
+  away. (The first plan said 4; 8 costs nothing measurable and keeps revealed hexes well clear
+  of the cells a new chunk's recovery may change.) They can't be boundary cells,
   so the revealed-is-fixed rule rarely restricts recovery. (M1 measured why this matters:
   with every earlier tile locked, 16% of chunk solves needed drops. With nothing locked,
   none did.) Existing hexes along the shared edge are the new chunk's fixed constraints.
@@ -404,10 +406,28 @@ knowing:
   drag still work. With animation on, software rendering is too slow for scripted screenshots.
   **Not checked on real WebGPU, nor how heavy the effects are on a real GPU.**
 
-**M5 — Chunk growth.** Background solve near edges, triggered early enough that revealed
-hexes never border an unsolved chunk (section 4). `isLocked` from M1 enforces the
-revealed-is-fixed rule. Growth animation in 3D. Test: grow 30 chunks along a random walk with
-no revealed hex ever changing, and count drops (target: none in normal play).
+**M5 — Chunk growth. ✅ Done 2026-11-05.** Background solve near edges, triggered early enough
+that revealed hexes never border an unsolved chunk (section 4). `isLocked` from M1 enforces the
+revealed-is-fixed rule.
+- `src/world/growth.ts` (pure): `chunksToGrow` (unsolved chunks within `GROW_RADIUS` = 8 of
+  the party, nearest first), `lockedKeys` (revealed hexes), `applyChunkResult` (applies a
+  solve's updates but never changes a revealed hex: a second guard behind `isLocked`).
+- `ADD_CHUNK` in the reducer; `src/state/useChunkGrowth.ts` drives it from the overland screen:
+  one worker solve at a time, each from the latest tiles, after every move and every landed
+  chunk. A failed chunk is skipped for the session (logged). The toolbar shows "Extending the
+  map…" while a chunk solves.
+- 3D: tiles new since the last build drop into place, rippling out from the middle of the new
+  area, and their scenery appears when they land (not with "reduce motion"). The camera only
+  centers on the party on the first build, so growth doesn't move the view. The water and coast
+  masks follow the new bounds.
+- **Measured** (`growth.test.ts`, the PLAN's test, two seeds): 30 chunks grown along random
+  walks of 511 and 802 steps (479 and 743 hexes revealed, 8,029 tiles): **0 dropped cells, 0
+  edge mismatches, no revealed hex ever changed**, and the party was never closer than 8 hexes
+  to unsolved ground. About 0.15 s per chunk.
+- 6 new tests (1,113 in all). Browser check (production build, WebGL2 fallback): walking 30
+  hexes east grew the map from 7 to 10 chunks with no stop; the 2D GM view and the 3D view show
+  the new chunks joining the old seamlessly. The drop animation wasn't watched (it only runs
+  with animation on, too slow in software rendering).
 
 **M6 — Map-aware points of interest.** Settlement anchors, 3D and 2D markers, and
 `waterForHex` reading real tile edges. This picks up map_generator's punch-list items 1b and 1c

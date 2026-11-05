@@ -9,7 +9,9 @@ import { generateSiteForHex, type GeneratedSite } from '../engine/generateSite'
 import { dangerLevelDelta, type DangerLevel, type Terrain } from '../data/tables'
 import { hexId, neighborsOf, parseHexId, type AxialCoord } from '../hexgrid/hexMath'
 import type { WorldParams } from '../world/fields'
+import { applyChunkResult } from '../world/growth'
 import { geoAt, type SavedTiles } from '../world/hexTiles'
+import type { PlacedTile } from '../wfc/rules'
 
 export type Hex = {
   id: string
@@ -87,6 +89,9 @@ export type MapAction =
   // can't wait on). The starting hex's terrain is read from its tile.
   | { type: 'START_MAP'; world: WorldParams; chunks: string[]; tiles: SavedTiles; startHexId: string; rng?: Rng }
   | { type: 'MOVE_PARTY_TO'; hexId: string; rng?: Rng }
+  // A chunk solved by the worker (world/growth.ts): its tiles, plus any unrevealed hexes nearby
+  // that the solve adjusted. Never changes a revealed hex.
+  | { type: 'ADD_CHUNK'; chunk: string; updates: PlacedTile[] }
   | { type: 'SELECT_HEX'; hexId: string }
   | { type: 'REROLL_HEX'; hexId: string; rng?: Rng }
   | { type: 'EDIT_HEX'; hexId: string; patch: HexEditPatch }
@@ -164,6 +169,12 @@ export function mapReducer(state: MapState, action: MapAction): MapState {
         partyHexId: action.hexId,
         selectedHexId: action.hexId,
       }
+    }
+
+    case 'ADD_CHUNK': {
+      if (!state.world || state.chunks.includes(action.chunk)) return state
+      const { tiles } = applyChunkResult(state.tiles, action.updates, (id) => id in state.hexes)
+      return { ...state, chunks: [...state.chunks, action.chunk], tiles }
     }
 
     case 'SELECT_HEX': {

@@ -5,9 +5,10 @@ type ToolbarProps = {
   onToggleGmView?: () => void
   view3d?: boolean
   onToggleView3d?: () => void
+  growing?: boolean // a chunk of the world is being solved
 }
 
-export function Toolbar({ gmView, onToggleGmView, view3d, onToggleView3d }: ToolbarProps) {
+export function Toolbar({ gmView, onToggleGmView, view3d, onToggleView3d, growing }: ToolbarProps) {
   const state = useMapState()
   const dispatch = useMapDispatch()
 
@@ -22,6 +23,7 @@ export function Toolbar({ gmView, onToggleGmView, view3d, onToggleView3d }: Tool
     <header className="toolbar">
       <h1>OSR Hex Crawl Generator</h1>
       <div className="toolbar-actions">
+        {growing && <span className="toolbar-seed">Extending the map…</span>}
         {state.world && <span className="toolbar-seed">World seed {state.world.seed}</span>}
         {state.partyHexId && onToggleView3d && (
           <button
