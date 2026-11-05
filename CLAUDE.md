@@ -5,9 +5,14 @@ felixturner/hex-map-wfc) generates the overland map. Clicking into a hex opens t
 site generators forked from `~/dev/source/map_generator`.
 
 **The plan, the decisions and the milestones are in `docs/PLAN.md`, which is committed.**
-Read it first. Status: **M0 done** (2026-11-04): map_generator forked in, all 1,012 tests
-pass, and the save key is renamed to `wfc-hex-crawl:map` so this app's saves stay separate
-from map_generator's on localhost:5173. M1 (headless WFC in TypeScript) is next.
+Read it first. Status (2026-11-04): **M0 and M1 done.**
+- M0: map_generator forked in. The save key is renamed to `wfc-hex-crawl:map`, so this
+  app's saves stay separate from map_generator's on localhost:5173.
+- M1: the WFC solver is ported to TypeScript in `src/wfc/` (see PLAN.md's M1 entry for what
+  changed from hex-map-wfc).
+
+M2 (world model: terrain from tiles and noise) is next. The suite takes about 20 s, mostly
+`src/wfc/benchmark.test.ts`.
 
 `docs/reference/map_generator-CLAUDE.md` is a snapshot of map_generator's CLAUDE.md as of the
 fork: its architecture notes for the site generators, state and tables still apply here. Its
@@ -20,6 +25,12 @@ copied.
 - Revealed hexes never change: no WFC re-solve, chunk growth or recovery step may change a
   revealed hex's tile or terrain.
 - `wfc/` and `world/` are pure TypeScript (no Three.js imports), so they're testable in Vitest.
+- Ported hex-map-wfc files keep Felix Turner's MIT notice in their header, along with a list
+  of what changed. Keep both up to date when editing them.
+- Saved maps store tile type ids, which are indexes into `TILE_LIST`. Reordering or removing
+  tiles breaks saves.
+- The tsconfig isn't `strict`, so TypeScript can't narrow a union on a boolean flag. Use one
+  object shape instead (see `AttemptResult` in `recovery.ts`).
 - Hex game data (danger, `dangerLevel`, point of interest) is rolled at reveal, not when the
   map is generated.
 - Rules carried over from map_generator's CLAUDE.md: tables are transcribed verbatim; visual

@@ -94,12 +94,16 @@ temperature. Elevation comes from the tile's level, not noise.
 
 ### 4. Chunk growth
 
-- Chunks sit on hex-map-wfc's chunk lattice: chunk centers are 17 hexes apart in cube
-  coordinates. The lattice extends without limit, so the map is unbounded (hex-map-wfc caps
-  its own at 19).
-- When the party moves within about 3 hexes of an unsolved area, the worker solves the
-  neighboring chunk in the background. Existing hexes along the shared edge are its fixed
-  constraints.
+- Chunks sit on an exact lattice in cube coordinates (`src/wfc/chunks.ts`): chunk centers
+  are 17 hexes apart, and every hex belongs to exactly one chunk. The lattice extends without
+  limit, so the map is unbounded. (hex-map-wfc instead positions its 19 grids with a
+  world-space walk.)
+- The worker solves a neighboring chunk in the background **before any revealed hex touches
+  unsolved ground**. Trigger it when the party is within about 4 hexes of an unsolved area;
+  then revealed hexes are at least 2 hexes from the new chunk. They can't be boundary cells,
+  so the revealed-is-fixed rule rarely restricts recovery. (M1 measured why this matters:
+  with every earlier tile locked, 16% of chunk solves needed drops. With nothing locked,
+  none did.) Existing hexes along the shared edge are the new chunk's fixed constraints.
 - Large-scale shape: hex-map-wfc seeds ocean at the map corners. We replace that with a seeded
   continent noise field that seeds ocean tiles where the field says "sea", so coasts and oceans
   form continent-scale bodies across chunks. This replaces map_generator 1a's "world formula".
@@ -143,14 +147,19 @@ temperature. Elevation comes from the tile's level, not noise.
 src/
   data/        ← from map_generator, unchanged except Terrain (Coast rename, Hills)
   engine/      ← from map_generator (sites, encounters, treasure…), unchanged
-  wfc/         ← ported from hex-map-wfc, TypeScript, no Three.js imports
-    tiles.ts          HexTileData: tile list, edges, levels
-    core.ts           HexWFCCore: propagation, backtracking
-    solver.worker.ts  wfc.worker
-    manager.ts        WFCManager: chunks, fixed cells, anchors, recovery
-    rng.ts            SeededRandom
+  wfc/         ← ported from hex-map-wfc, TypeScript, no Three.js imports (built in M1)
+    tiles.ts          HexTileData: the 34 active tiles, edges, levels
+    cube.ts           cube-coordinate helpers
+    rules.ts          edge levels, bitset adjacency lookups, findMismatches
+    solver.ts         HexWFCSolver: propagation, backtracking, unfixing
+    recovery.ts       solveRegion: Local-WFC and drop recovery, with isLocked
+    chunks.ts         chunk lattice, solveChunk, first-chunk seeds
+    protocol.ts       worker request/response, handleSolveChunkRequest
+    solver.worker.ts  the Web Worker (just calls protocol.ts)
+    client.ts         WfcClient: promise wrapper around the worker
+    rng.ts            Mulberry32, per-chunk seeds
   world/       ← new: the bridge between tiles and game hexes
-    world.ts          chunk lattice, growth trigger, revealed-is-fixed rule
+    world.ts          growth trigger, revealed-is-fixed rule (lattice is in wfc/chunks.ts)
     terrain.ts        tile + noise → Terrain, river/road edges, lakes
     anchors.ts        settlement anchors
     noise.ts          continent / moisture / temperature fields
@@ -182,10 +191,31 @@ Each milestone ends with tests passing and, where there's UI, a browser check.
 `LICENSE` and README into this repo. Leave out `docs/`, `dist/`, `node_modules/` and `.claude/`.
 Rename the package. All 1,012 tests pass. Add the license notices (see Licensing).
 
-**M1 — Headless WFC in TypeScript.** Port `HexTileData`, `HexWFCCore`, `SeededRandom`, the
-worker and `WFCManager` (chunks plus recovery) into `src/wfc/`, with no rendering. Tests: the
-same seed gives the same chunk, every solved edge pair matches, and a 50-seed benchmark solves
-100%.
+**M1 — Headless WFC in TypeScript. ✅ Done 2026-11-04.** Ported `HexTileData`,
+`HexWFCCore`, `SeededRandom`, the worker solver, `WFCManager` and the recovery loop from
+`HexMap.js` into `src/wfc/`, with no rendering. 30 tests, including a 50-seed benchmark
+(`benchmark.test.ts`): 100% solved, with and without locking, and no edge mismatch that
+isn't explained by a dropped cell. A production build was also checked in headless Chromium:
+the real module worker solved two chunks (434 tiles, no mismatches, 118 ms). What changed
+from hex-map-wfc, and why (each file's header has the details):
+- **Bitsets instead of string-keyed Sets** for each cell's possible states: about 1.6 s per
+  chunk down to about 57 ms. Same algorithm.
+- **Injected per-chunk Rng** (from the world seed and the chunk) instead of one global
+  stream, so a chunk's result doesn't depend on how many solves ran before it.
+- **`isLocked`** for revealed hexes: never unfixed, never re-solved by Local-WFC; dropped
+  if necessary, which leaves their tile unchanged.
+- **The recovery loop runs inside the worker** as one synchronous call. A request carries
+  only the tiles within 12 hexes of the chunk center, so the worker keeps no state.
+- **Chaining prunes are on the backtracking trail**, so backtracking restores them.
+  hex-map-wfc loses them for the rest of the try.
+- **Grass edges must match in level.** That's what hex-map-wfc's solver actually enforces;
+  its looser `edgesCompatible` is only used by its renderer and isn't ported.
+- The first chunk is seeded as in hex-map-wfc (grass at the center, water at a random edge),
+  until M2's continent noise replaces it. hex-map-wfc's map-corner ocean seeds aren't ported
+  (they assume its fixed 19-grid map).
+Recovery stats over 350 solves (50 seeds × 7 chunks): unfixing in 15% of solves, Local-WFC
+5 times, 0 drops. With every earlier tile locked: 68 drops in 55 solves (16%). See section 4
+for how M5 avoids that.
 
 **M2 — World model.** `world/`: chunk lattice, continent noise for ocean seeds, terrain from
 tile and noise, river and road edges, lakes. The `Terrain` changes (Coast rename, Hills, wiring
@@ -203,9 +233,10 @@ fog of war (hide or cloud unrevealed tiles; dim them in GM view), party and POI 
 picking. Add the 2D/3D toggle. Fall back to WebGL2 when WebGPU is missing (Three.js's
 `WebGPURenderer` can do this; check the TSL effects, and turn off post-processing if needed).
 
-**M5 — Chunk growth.** Background solve near edges, the revealed-is-fixed rule in recovery,
-and growth animation in 3D. Test: grow 30 chunks along a random walk with no revealed hex ever
-changing.
+**M5 — Chunk growth.** Background solve near edges, triggered early enough that revealed
+hexes never border an unsolved chunk (section 4). `isLocked` from M1 enforces the
+revealed-is-fixed rule. Growth animation in 3D. Test: grow 30 chunks along a random walk with
+no revealed hex ever changing, and count drops (target: none in normal play).
 
 **M6 — Map-aware points of interest.** Settlement anchors, 3D and 2D markers, and
 `waterForHex` reading real tile edges. This picks up map_generator's punch-list items 1b and 1c
@@ -240,8 +271,9 @@ changing.
 ## Risks
 
 - **Revealed hexes can't be changed.** hex-map-wfc's recovery freely unfixes neighbor cells.
-  Restricting it may lower the solve rate. The mountain fallback is the safety net, so measure
-  how often it fires.
+  M1 measured the cost: solves still always succeed, but with every boundary tile locked, 16%
+  need drops, which leave a visible seam (hidden by a mountain in 3D). Mitigation: grow chunks
+  early (section 4). M7's local re-solves near revealed hexes face the same limit.
 - **Small tile set.** It has no swamp, desert, forest or lake tiles. Biome tinting and
   decorations must make these readable in 3D, and the 2D view relies on fill color plus icons.
 - **WebGPU support.** Safari and Firefox support varies. The 2D view is always available, and
