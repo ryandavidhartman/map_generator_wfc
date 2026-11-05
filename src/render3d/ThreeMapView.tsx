@@ -75,7 +75,8 @@ export default function ThreeMapView({ gmView }: { gmView: boolean }) {
   useEffect(() => {
     const scene = sceneRef.current
     if (status !== 'ready' || !scene) return
-    scene.setTiles(tileDraws(latest.current.state, gmView))
+    const st = latest.current.state
+    scene.setTiles(tileDraws(st, gmView), st.tiles, st.world?.seed ?? 0)
     if (latest.current.state.partyHexId) scene.focus(latest.current.state.partyHexId)
     // gmView changes are handled by setView below; only tiles/world rebuild the mesh.
     // eslint-disable-next-line react-hooks/exhaustive-deps

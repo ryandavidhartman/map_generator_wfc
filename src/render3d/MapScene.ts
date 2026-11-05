@@ -5,10 +5,15 @@
 // src/Lighting.js), and the tile instancing from src/hexmap/HexGrid.js and HexTiles.js,
 // Copyright (c) 2026 Felix Turner, MIT License:
 // https://github.com/felixturner/hex-map-wfc/blob/main/LICENSE
+// Decorations are placed as in hex-map-wfc's Decorations.js (geometry prep, one BatchedMesh,
+// the shared material), and the frame loop follows its App.animate (depth-of-field focus from
+// the camera distance).
 // Changes:
-// - TypeScript, one class; one BatchedMesh for the whole map instead of one per 217-hex grid.
-// - No orthographic camera, GUI, stats, debug helpers, sounds, animation or post-processing
-//   (post-processing, water and decorations are M4b).
+// - TypeScript, one class; one BatchedMesh for the tiles and one for the decorations, for the
+//   whole map, instead of a pair per 217-hex grid. What goes where is planned by scenery.ts.
+// - No orthographic camera, GUI, stats, debug helpers, sounds or build animations.
+// - Draws continuously only while something animates (the water); with the OS "reduce motion"
+//   setting it draws only when something changes.
 // - The renderer doesn't require WebGPU: WebGPURenderer falls back to WebGL2 by itself.
 // - The light's shadow frustum follows the camera target as in hex-map-wfc, perspective only.
 // - New: markers (party, points of interest, selection, danger rings) and click picking by hex.
@@ -44,8 +49,13 @@ import { HDRLoader } from 'three/addons/loaders/HDRLoader.js'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { DANGER_COLORS } from '../hexgrid/colors'
 import { TILE_LIST } from '../wfc/tiles'
-import { hexWorldPosition, instanceColor, isSeaTile, rotationAngle, tileBaseY, type TileDraw } from './layout'
-import { createTileMaterial } from './tileMaterial'
+import type { SavedTiles } from '../world/hexTiles'
+import { hexWorldPosition, instanceColor, isSeaTile, rotationAngle, TINT, tileBaseY, type TileDraw } from './layout'
+import { PostFX } from './postFX'
+import { ALL_DECORATION_MESHES, MOUNTAIN_MESHES, planScenery } from './scenery'
+import { createTileMaterial, RENDER_MODE, type TileMaterial } from './tileMaterial'
+import { Water } from './water'
+import { maskBounds, WavesMask } from './wavesMask'
 
 const BACKGROUND = 0x98a4bb
 const ENV_INTENSITY = 0.95
@@ -56,6 +66,7 @@ const CAMERA_FOV = 20
 const CAMERA_OFFSET = new Vector3(0, 55, 32) // from the target: about 11 hexes tall at the start
 const DOUBLE_CLICK_DELAY_MS = 250
 const CLICK_SLOP_PX = 5
+const MASK_DELAY_FRAMES = 3
 
 export type MarkerView = {
   partyHexId: string | null
@@ -69,14 +80,19 @@ export type MapSceneCallbacks = {
   onDoubleClick: (hexId: string) => void
 }
 
-type TileAssets = { geoms: Map<number, BufferGeometry>; bottom: BufferGeometry | null; material: Material }
+type TileAssets = {
+  geoms: Map<number, BufferGeometry>
+  bottom: BufferGeometry | null
+  decorations: Map<string, BufferGeometry>
+  tileMaterial: TileMaterial
+}
 
 // Loaded once per page and shared by every MapScene (switching 2D/3D back and forth).
 let assetsPromise: Promise<TileAssets> | null = null
 
 function loadTileAssets(assetBase: string): Promise<TileAssets> {
   assetsPromise ??= (async () => {
-    const [gltf, material] = await Promise.all([
+    const [gltf, tileMaterial] = await Promise.all([
       new GLTFLoader().loadAsync(`${assetBase}models/hex-terrain.glb`),
       createTileMaterial(assetBase),
     ])
@@ -110,7 +126,23 @@ function loadTileAssets(assetBase: string): Promise<TileAssets> {
       bottom.computeBoundingBox()
       bottom.computeBoundingSphere()
     }
-    return { geoms, bottom, material }
+    // Decorations sit with their lowest point at y = 0; mountains are sunk half a unit so they
+    // look shorter (hex-map-wfc Decorations.initGeometries).
+    const decorations = new Map<string, BufferGeometry>()
+    for (const name of ALL_DECORATION_MESHES) {
+      const g = byName.get(name)
+      if (!g) {
+        console.warn(`3D map: no decoration mesh "${name}"`)
+        continue
+      }
+      const out = g.clone()
+      out.computeBoundingBox()
+      out.translate(0, -out.boundingBox!.min.y - (MOUNTAIN_MESHES.includes(name) ? 0.5 : 0), 0)
+      out.computeBoundingBox()
+      out.computeBoundingSphere()
+      decorations.set(name, out)
+    }
+    return { geoms, bottom, decorations, tileMaterial }
   })()
   assetsPromise.catch(() => (assetsPromise = null))
   return assetsPromise
@@ -127,6 +159,13 @@ export class MapScene {
   private light: DirectionalLight | null = null
   private assets: TileAssets | null = null
   private tileMesh: BatchedMesh | null = null
+  private decoMesh: BatchedMesh | null = null
+  private decoInstances = new Map<string, { id: number; level: number }[]>() // hex id -> decorations
+  private water: Water | null = null
+  private wavesMask: WavesMask | null = null
+  private postFX: PostFX | null = null
+  private tilesForMask: SavedTiles = {}
+  private readonly animate = !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
   private tileInstances = new Map<string, number>() // hex id -> tile instance
   private fillInstances = new Map<string, number>() // hex id -> fill instance
   private instanceHex = new Map<number, string>() // instance -> hex id
@@ -134,6 +173,8 @@ export class MapScene {
   private readonly markers = new Group()
   private resizeObserver: ResizeObserver | null = null
   private disposed = false
+  private worldSeed = 0
+  private maskFrames = 0 // frames until the coast masks are redrawn (0: not pending)
   private dirty = true // draw on the next frame (nothing is drawn while nothing changes)
   private pendingClick: number | null = null
   private downAt: { x: number; y: number } | null = null
@@ -195,6 +236,16 @@ export class MapScene {
     this.scene.environment = env
     this.assets = assets
 
+    this.wavesMask = new WavesMask(renderer)
+    this.water = new Water(this.assetBase, this.wavesMask.coastTexture, this.wavesMask.coveTexture)
+    this.scene.add(this.water.mesh)
+    this.postFX = new PostFX(renderer, this.scene, this.camera, {
+      overlay: [this.markers],
+      water: [this.water.mesh],
+      waterMask: [],
+      setMaskMode: (on) => assets.tileMaterial.setRenderMode(on ? RENDER_MODE.waterMask : RENDER_MODE.normal),
+    })
+
     this.resizeObserver = new ResizeObserver(() => this.resize())
     this.resizeObserver.observe(this.canvas.parentElement ?? this.canvas)
     this.resize()
@@ -219,9 +270,12 @@ export class MapScene {
   }
 
   // Rebuild the tile instances (the solved map changed).
-  setTiles(draws: TileDraw[]): void {
+  setTiles(draws: TileDraw[], tiles: SavedTiles, worldSeed: number): void {
+    this.tilesForMask = tiles
+    this.worldSeed = worldSeed
     if (!this.assets) return
-    const { geoms, bottom, material } = this.assets
+    const { geoms, bottom, tileMaterial } = this.assets
+    const material = tileMaterial.material
     if (this.tileMesh) {
       this.scene.remove(this.tileMesh)
       this.tileMesh.dispose()
@@ -281,7 +335,11 @@ export class MapScene {
     }
     this.tileMesh = mesh
     this.scene.add(mesh)
+    this.buildDecorations(draws)
     this.applyLooks()
+    // The coast masks are drawn a few frames later: drawing the tiles before the scene has
+    // rendered once (while their shaders are still being prepared) leaves the masks empty.
+    this.maskFrames = MASK_DELAY_FRAMES
     this.dirty = true
   }
 
@@ -319,6 +377,10 @@ export class MapScene {
     this.controls?.dispose()
     this.renderer?.setAnimationLoop(null)
     this.tileMesh?.dispose()
+    this.decoMesh?.dispose()
+    this.water?.dispose()
+    this.wavesMask?.dispose()
+    this.postFX?.dispose()
     this.clearMarkers()
     this.renderer?.dispose()
   }
@@ -333,7 +395,77 @@ export class MapScene {
       if (tile !== undefined) mesh.setColorAt(tile, this.color)
       const fill = this.fillInstances.get(id)
       if (fill !== undefined) mesh.setColorAt(fill, this.color)
+      // Decorations: hidden on fog silhouettes, otherwise shaded like their tile (G = 1 marks
+      // them as decorations for the shader).
+      const decos = this.decoInstances.get(id)
+      if (decos && this.decoMesh) {
+        const fog = d.look.tint === TINT.fog || d.look.tint === TINT.fogFrontier
+        for (const deco of decos) {
+          this.decoMesh.setVisibleAt(deco.id, !fog)
+          const [dr, , db] = instanceColor(deco.level, d.look, false)
+          this.decoMesh.setColorAt(deco.id, this.color.setRGB(dr, 1, db))
+        }
+      }
     }
+  }
+
+  private buildDecorations(draws: TileDraw[]): void {
+    if (!this.assets) return
+    if (this.decoMesh) {
+      this.scene.remove(this.decoMesh)
+      this.decoMesh.dispose()
+      this.decoMesh = null
+    }
+    this.decoInstances.clear()
+    const plans = draws.flatMap((d) => planScenery(d, this.worldSeed))
+    if (plans.length === 0) return
+    const geoms = this.assets.decorations
+    let vertices = 0
+    let indices = 0
+    for (const g of geoms.values()) {
+      vertices += g.attributes.position.count
+      indices += g.index ? g.index.count : 0
+    }
+    const mesh = new BatchedMesh(plans.length + 16, vertices, indices, this.assets.tileMaterial.material)
+    mesh.castShadow = true
+    mesh.receiveShadow = true
+    mesh.frustumCulled = false
+    const ids = new Map<string, number>()
+    for (const [name, g] of geoms) ids.set(name, mesh.addGeometry(g))
+    const first = mesh.addInstance(ids.values().next().value!)
+    mesh.setColorAt(first, this.color.setRGB(1, 1, 1))
+    this.dummy.position.set(0, -1000, 0)
+    this.dummy.rotation.set(0, 0, 0)
+    this.dummy.scale.setScalar(0)
+    this.dummy.updateMatrix()
+    mesh.setMatrixAt(first, this.dummy.matrix)
+    for (const p of plans) {
+      const geomId = ids.get(p.mesh)
+      if (geomId === undefined) continue
+      const id = mesh.addInstance(geomId)
+      this.dummy.position.set(p.x, p.y, p.z)
+      this.dummy.rotation.set(0, p.rotY, 0)
+      this.dummy.scale.setScalar(p.scale)
+      this.dummy.updateMatrix()
+      mesh.setMatrixAt(id, this.dummy.matrix)
+      const list = this.decoInstances.get(p.hexId) ?? []
+      list.push({ id, level: p.level })
+      this.decoInstances.set(p.hexId, list)
+    }
+    this.decoMesh = mesh
+    this.scene.add(mesh)
+  }
+
+  // Size the water to the map and redraw the coast masks (after the tiles change).
+  private updateWater(): void {
+    const { water, wavesMask, tileMesh, assets, postFX } = this
+    if (!water || !wavesMask || !tileMesh || !assets || !postFX) return
+    const bounds = maskBounds(this.tilesForMask)
+    water.setBounds(bounds)
+    assets.tileMaterial.setRenderMode(RENDER_MODE.trueColor)
+    wavesMask.render(this.scene, [tileMesh], water.mesh, bounds, this.tilesForMask)
+    assets.tileMaterial.setRenderMode(RENDER_MODE.normal)
+    postFX.setLayers({ waterMask: [tileMesh, ...(this.decoMesh ? [this.decoMesh] : [])] })
   }
 
   private surfaceAt(hexId: string): Vector3 {
@@ -423,6 +555,8 @@ export class MapScene {
     const w = Math.max(1, parent.clientWidth)
     const h = Math.max(1, parent.clientHeight)
     renderer.setSize(w, h, false)
+    const dpr = renderer.getPixelRatio()
+    this.postFX?.setSize(Math.round(w * dpr), Math.round(h * dpr))
     this.camera.aspect = w / h
     this.camera.updateProjectionMatrix()
     this.dirty = true
@@ -433,10 +567,25 @@ export class MapScene {
   private frame(): void {
     if (!this.renderer || !this.controls) return
     const moved = this.controls.update()
-    if (!moved && !this.dirty) return
+    if (this.maskFrames > 0 && --this.maskFrames === 0) {
+      this.updateWater()
+      this.dirty = true
+    }
+    if (this.maskFrames > 0) this.dirty = true // keep frames coming until the masks are drawn
+    if (!moved && !this.dirty && !this.animate) return
     this.dirty = false
     this.updateShadowCamera()
-    this.renderer.render(this.scene, this.camera)
+    if (this.postFX) {
+      // Depth of field focuses on the camera target; the blur shrinks as you zoom in
+      // (hex-map-wfc App.animate).
+      const dist = this.camera.position.distanceTo(this.controls.target)
+      this.postFX.dofFocus.value = dist
+      const t = Math.min(Math.max((dist - 25) / (410 - 25), 0), 1)
+      this.postFX.dofFocalLength.value = 20 + t * 80
+      this.postFX.render(this.camera)
+    } else {
+      this.renderer.render(this.scene, this.camera)
+    }
   }
 
   // The sun follows the view, and its shadow frustum is fitted to what the camera sees

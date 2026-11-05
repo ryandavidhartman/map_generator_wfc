@@ -368,9 +368,41 @@ only when the 3D view opens; the main bundle didn't grow. What's worth knowing:
   the hex page, drag pans without moving it; Hills and Desert/arctic starts.
 - Not checked: a real WebGPU browser (the headless one has none). Worth a look on your machine.
 
-**M4b — 3D polish.** Animated water (caustics, coastal waves), decorations (forest trees driven
-by biome, buildings, rocks), post-processing (ambient occlusion, depth of field, vignette, grain;
-off if the WebGL2 fallback can't run them).
+**M4b — 3D polish. ✅ Done 2026-11-05.** Animated water (caustics, coastal waves), decorations, post-processing.
+Decisions (user, 2026-11-05):
+- **No buildings until M6.** hex-map-wfc scatters houses and windmills along roads; here a
+  building would suggest a settlement the game doesn't have. M6 puts buildings on POI hexes.
+- **Scenery follows terrain:** Forest/jungle dense trees, Grassland a few clumps, Swamp sparse
+  trees with water lilies and flowers, Desert/arctic rocks only, Hills and Mountains their hill
+  and mountain models, bridges where roads cross rivers. None on fog silhouettes.
+- **All four screen effects, as hex-map-wfc:** ambient occlusion, vignette, depth of field and
+  film grain (off if the WebGL2 fallback can't run them).
+
+Built (`src/render3d/`): `scenery.ts` (pure: what decorations go on each hex), `water.ts`,
+`wavesMask.ts`, `postFX.ts`, and a render-mode uniform in `tileMaterial.ts`. What's worth
+knowing:
+- **Scenery is deterministic per hex** (world seed + hex), so revealing or re-solving never
+  reshuffles a hex's trees. Forest/jungle: one dense tree group on every flat hex, and trees
+  beside its rivers and roads (toward grass edges, off the water). Grassland ~22% clumps. Swamp:
+  sparse trees, water plants, lilies on rivers. Desert/arctic: rocks. Hills/Mountain: hill and
+  mountain models; cliffs sometimes get one too. Bridges on every river crossing. River ends
+  without a lake get a hill. Chances are in `SCENERY_TUNING`. Decorations are hidden on fog
+  silhouettes and dimmed with their hex in GM view.
+- **Water and masks cover the map's bounds** (centered on the tiles, at hex-map-wfc's
+  2048-texels-per-180-units scale), not a fixed square at the origin, ready for M5's growth.
+- **The coast masks are drawn 3 frames after the tiles change.** Drawn right away (before the
+  scene's first render) they came out empty, so there were no waves.
+- **One material, three modes** (normal, true color for the coast mask, water mask), switched by
+  a uniform. The water layer only shows where water is visible: none under fog, dimmed in GM
+  view.
+- Markers are an overlay drawn after AO and blur, alpha-blended (hex-map-wfc adds it).
+- **Animation:** the water moves, so the map draws every frame, except with the OS "reduce
+  motion" setting, where it draws only when something changes (and the water stands still).
+- 7 new tests (1,107 in all). Browser check (production build, headless Chromium on the WebGL2
+  fallback with software rendering, "reduce motion" emulated): AO, depth of field, vignette,
+  grain, sparkles and coastal waves all render; scenery per terrain; click, double-click and
+  drag still work. With animation on, software rendering is too slow for scripted screenshots.
+  **Not checked on real WebGPU, nor how heavy the effects are on a real GPU.**
 
 **M5 — Chunk growth.** Background solve near edges, triggered early enough that revealed
 hexes never border an unsolved chunk (section 4). `isLocked` from M1 enforces the

@@ -119,6 +119,10 @@ export type TileDraw = {
   rotation: number
   level: number
   look: TileLook
+  // The hex's terrain as the game knows it (a revealed hex's own, else the tile's), and whether
+  // the world puts a lake here; scenery.ts plans decorations from these.
+  terrain: Terrain
+  lake: boolean
 }
 
 // Every solved hex as the 3D view draws it. Unrevealed hexes are drawn too: as fog silhouettes
@@ -130,7 +134,8 @@ export function tileDraws(state: MapState, gmView: boolean): TileDraw[] {
   for (const id of Object.keys(state.tiles)) {
     const t = placedTileAt(state.tiles, id)!
     const hex = state.hexes[id]
-    const terrain = hex?.terrain ?? deriveHexGeo(t, fields).terrain
+    const geo = deriveHexGeo(t, fields)
+    const terrain = hex?.terrain ?? geo.terrain
     const look = tileLook({
       revealed: Boolean(hex),
       gmView,
@@ -138,7 +143,7 @@ export function tileDraws(state: MapState, gmView: boolean): TileDraw[] {
       terrain,
       temperature: fields.sample(t).temperature,
     })
-    out.push({ id, q: t.q, r: t.r, type: t.type, rotation: t.rotation, level: t.level, look })
+    out.push({ id, q: t.q, r: t.r, type: t.type, rotation: t.rotation, level: t.level, look, terrain, lake: geo.lake })
   }
   return out
 }

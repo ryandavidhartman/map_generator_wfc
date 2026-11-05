@@ -5,7 +5,7 @@ felixturner/hex-map-wfc) generates the overland map. Clicking into a hex opens t
 site generators forked from `~/dev/source/map_generator`.
 
 **The plan, the decisions and the milestones are in `docs/PLAN.md`, which is committed.**
-Read it first. Status (2026-11-05): **M0-M3 and M4a done.**
+Read it first. Status (2026-11-05): **M0-M4 done.**
 - M0: map_generator forked in. The save key is renamed to `wfc-hex-crawl:map`, so this
   app's saves stay separate from map_generator's on localhost:5173.
 - M1: the WFC solver is ported to TypeScript in `src/wfc/` (see PLAN.md's M1 entry for what
@@ -21,8 +21,10 @@ Read it first. Status (2026-11-05): **M0-M3 and M4a done.**
 - M4a: the 3D map in `src/render3d/` (lazy-loaded, Three.js 0.183.2): tiles from hex-map-wfc's
   GLB, biome tints, grey fog silhouettes, markers, picking, and the 2D/3D toggle.
 
-M4b (water, decorations, post-processing) is next; M5 (chunk growth) lets the party leave the
-starting 7 chunks. The suite
+- M4b: terrain-driven scenery (`scenery.ts`), animated water and coastal waves, and
+  post-processing (AO, depth of field, vignette, grain). No buildings until M6.
+
+M5 (chunk growth) is next: it lets the party leave the starting 7 chunks. The suite
 takes about 25-30 s, mostly the WFC and world tests.
 
 `docs/reference/map_generator-CLAUDE.md` is a snapshot of map_generator's CLAUDE.md as of the
@@ -40,7 +42,9 @@ copied.
   `layout.ts` stays pure and tested. Keep Three.js out of the main bundle (lazy import only).
 - 3D browser checks: headless Chromium has no WebGPU, so launch it with
   `--use-angle=swiftshader --enable-unsafe-swiftshader` (WebGL2 fallback) and close each tab
-  after use; open tabs keep rendering and slow everything down.
+  after use; open tabs keep rendering and slow everything down. Emulate "reduce motion"
+  (`Emulation.setEmulatedMedia`, `prefers-reduced-motion: reduce`) so the map draws on demand;
+  with the animated water on, software rendering is too slow for scripted screenshots.
 - Ported hex-map-wfc files keep Felix Turner's MIT notice in their header, along with a list
   of what changed. Keep both up to date when editing them.
 - Saved maps store tile type ids, which are indexes into `TILE_LIST`. Reordering or removing

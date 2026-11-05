@@ -14,6 +14,8 @@
 //   - fog draws a flat, unlit two-tone grey silhouette (sea darker than land; rivers aren't
 //     shown);
 //   - dim darkens the tile (unrevealed hexes in GM view).
+// - Decorations share the material (instance G = 1), as in hex-map-wfc.
+// - A render-mode uniform replaces hex-map-wfc's separate water-mask material (RENDER_MODE).
 //
 // The tiles' UVs index an 8x4 palette atlas (moody.png at low levels, winter.png at high ones,
 // blended by level and by height within a slope), loaded with flipY off as the GLB expects.
@@ -31,6 +33,7 @@ import {
   positionGeometry,
   select,
   texture,
+  uniform,
   uv,
   varying,
   varyingProperty,
@@ -53,13 +56,13 @@ const FOG_WATER = 0.035
 const FOG_FRONTIER_BOOST = 1.7
 const DIM = 0.4
 
-function loadTexture(loader: TextureLoader, path: string): Promise<Texture> {
+function loadTexture(loader: TextureLoader, path: string, srgb = true): Promise<Texture> {
   return new Promise((resolve, reject) => {
     loader.load(
       path,
       (tex) => {
         tex.flipY = false // the GLB's UVs expect non-flipped textures
-        tex.colorSpace = SRGBColorSpace
+        if (srgb) tex.colorSpace = SRGBColorSpace // (the water mask is data, kept linear)
         tex.needsUpdate = true
         resolve(tex)
       },
@@ -69,12 +72,30 @@ function loadTexture(loader: TextureLoader, path: string): Promise<Texture> {
   })
 }
 
-export async function createTileMaterial(assetBase: string): Promise<MeshPhysicalNodeMaterial> {
+// How the material draws. Uniform, so switching modes between passes needs no recompile.
+export const RENDER_MODE = {
+  normal: 0,
+  // True colors, ignoring fog and GM dimming: for the top-down coast mask (wavesMask.ts),
+  // which finds the sea by its blue.
+  trueColor: 1,
+  // Where water shows: the palette's water mask (water-mask.png), 0 under fog, dimmed in GM
+  // view; for the water layer's mask (postFX.ts).
+  waterMask: 2,
+} as const
+
+export type TileMaterial = {
+  material: MeshPhysicalNodeMaterial
+  setRenderMode: (mode: (typeof RENDER_MODE)[keyof typeof RENDER_MODE]) => void
+}
+
+export async function createTileMaterial(assetBase: string): Promise<TileMaterial> {
   const loader = new TextureLoader()
-  const [texLo, texHi] = await Promise.all([
+  const [texLo, texHi, texMask] = await Promise.all([
     loadTexture(loader, `${assetBase}textures/moody.png`),
     loadTexture(loader, `${assetBase}textures/winter.png`),
+    loadTexture(loader, `${assetBase}textures/water-mask.png`, false),
   ])
+  const renderMode = uniform(RENDER_MODE.normal)
 
   const mat = new MeshPhysicalNodeMaterial()
   mat.roughness = 1
@@ -92,10 +113,12 @@ export async function createTileMaterial(assetBase: string): Promise<MeshPhysica
   const texCoord = uv()
   const batchColor = varyingProperty('vec3', 'vBatchColor')
 
-  // Level blend (hex-map-wfc): instance level, plus the height within a slope tile (its surface
-  // is at geometry y = 1, each 0.5 above that is one more level).
+  // Level blend (hex-map-wfc): instance level, plus the height within the mesh. A tile's
+  // surface is at geometry y = 1 and each 0.5 above it is one more level; decorations (G = 1)
+  // start at y = 0.
   const rawGeomPos = varying(positionGeometry, 'vRawGeomPos')
-  const slopeContrib = rawGeomPos.y.sub(1.0).mul(2.0 / (LEVELS_COUNT - 1))
+  const isDecoration = batchColor.g.greaterThan(0.5)
+  const slopeContrib = select(isDecoration, rawGeomPos.y, rawGeomPos.y.sub(1.0)).mul(2.0 / (LEVELS_COUNT - 1))
   // Change from hex-map-wfc: the blend starts at level 2 (0 there, 0.5 at level 3, 1 at 4).
   // This world is steered higher than hex-map-wfc's (most land is at levels 1-3), and blending
   // from level 0 washed ordinary land out toward the snowy palette.
@@ -125,9 +148,14 @@ export async function createTileMaterial(assetBase: string): Promise<MeshPhysica
   const isFog = tint.equal(TINT.fog).or(tint.equal(TINT.fogFrontier))
   const fogGrey = select(isWater.and(seaTile), float(FOG_WATER), float(FOG_LAND)).mul(select(tint.equal(TINT.fogFrontier), float(FOG_FRONTIER_BOOST), float(1)))
 
-  mat.colorNode = select(isFog, vec3(0, 0, 0), lit)
-  // Fog is unlit: all of its color comes from emission.
-  mat.emissiveNode = select(isFog, vec3(fogGrey, fogGrey, fogGrey), vec3(0, 0, 0))
+  const isTrue = renderMode.equal(RENDER_MODE.trueColor)
+  const isMask = renderMode.equal(RENDER_MODE.waterMask)
+  const fogNow = isFog.and(isTrue.not())
+  const maskValue = select(isFog, float(0), texture(texMask, texCoord).r.mul(select(dim, float(DIM), float(1))))
+
+  mat.colorNode = select(isMask.or(fogNow), vec3(0, 0, 0), select(isTrue, tinted, lit))
+  // Fog is unlit: all of its color comes from emission. So is the water mask.
+  mat.emissiveNode = select(isMask, vec3(maskValue, maskValue, maskValue), select(fogNow, vec3(fogGrey, fogGrey, fogGrey), vec3(0, 0, 0)))
   mat.needsUpdate = true
-  return mat
+  return { material: mat, setRenderMode: (mode) => (renderMode.value = mode) }
 }

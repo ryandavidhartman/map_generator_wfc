@@ -67,6 +67,7 @@ License. Its assets in `public/assets/` come from hex-map-wfc's repository:
   [KayKit Medieval Hexagon Pack](https://kaylousberg.itch.io/kaykit-medieval-hexagon) by Kay
   Lousberg (CC0), with additional tiles (sloping rivers, river ends, river-to-coast and cliff
   variants) by Felix Turner (MIT).
-- `textures/moody.png`, `textures/winter.png`: palette textures by Felix Turner (MIT).
+- `textures/moody.png`, `textures/winter.png`, `textures/water-mask.png`,
+  `textures/caustic.jpg`: palette, water-mask and caustic textures from hex-map-wfc (MIT).
 - `hdr/venice_sunset_1k.hdr`: the "Venice Sunset" HDRI from [Poly Haven](https://polyhaven.com)
   (CC0).
