@@ -1,5 +1,5 @@
-import { rollDie, roll2d6, type Rng } from './dice'
-import { type Terrain, type DangerLevel, terrainFor2d6, newHexResultFor2d6, stepTerrain, dangerForD6, settlementNameForD20, settlementNameColumnFor } from '../data/tables'
+import { rollDie, sumDice, type Rng } from './dice'
+import { type Terrain, type DangerLevel, terrainFor3d6, dangerForD6, settlementNameForD20, settlementNameColumnFor } from '../data/tables'
 import { type SiteKind, locationFeatureForD200, cataclysmForTerrain, naturalLandmarkForTerrain } from '../data/locationTables'
 
 export type PointOfInterest = {
@@ -26,15 +26,9 @@ export type GeneratedHexDetails = {
   poi?: PointOfInterest
 }
 
+// The start dialog's Random roll (punch-list 1a's 3d6 table, Ocean included).
 export function rollStartingTerrain(rng: Rng = Math.random): Terrain {
-  return terrainFor2d6(roll2d6(rng))
-}
-
-export function rollNextTerrain(currentTerrain: Terrain, rng: Rng = Math.random): Terrain {
-  const result = newHexResultFor2d6(roll2d6(rng))
-  if (result.kind === 'same') return currentTerrain
-  if (result.kind === 'step') return stepTerrain(currentTerrain, result.steps)
-  return rollStartingTerrain(rng)
+  return terrainFor3d6(sumDice(3, 6, rng))
 }
 
 export function rollDangerLevel(rng: Rng = Math.random): DangerLevel {
@@ -45,8 +39,7 @@ export function rollDangerLevel(rng: Rng = Math.random): DangerLevel {
 // "Location Generator expansion" section for the full locked table + provenance). Builds the POI
 // for an already-decided Feature roll (1-200) — split out of rollPointOfInterest so a review tool
 // (src/routes/PoiReviewPage.tsx) can force a specific roll without going through the outer 1-in-6
-// gate. Terrain is not a fresh roll here — it reuses the hex's own already-rolled `terrain`, per
-// that section's note that the two 2d6 tables are identical by design.
+// gate. Terrain is not a fresh roll here — it reuses the hex's own terrain.
 export function pointOfInterestForFeatureRoll(terrain: Terrain, featureRoll: number, rng: Rng = Math.random): PointOfInterest {
   const entry = locationFeatureForD200(featureRoll)
 
@@ -79,16 +72,9 @@ export function rollPointOfInterest(terrain: Terrain, rng: Rng = Math.random): P
   return pointOfInterestForFeatureRoll(terrain, rollDie(200, rng), rng)
 }
 
-export function generateStartingHexDetails(terrain: Terrain, rng: Rng = Math.random): GeneratedHexDetails {
-  return {
-    terrain,
-    danger: rollDangerLevel(rng),
-    poi: rollPointOfInterest(terrain, rng),
-  }
-}
-
-export function generateNextHexDetails(currentTerrain: Terrain, rng: Rng = Math.random): GeneratedHexDetails {
-  const terrain = rollNextTerrain(currentTerrain, rng)
+// A revealed hex's game data. Terrain comes from the map (the hex's WFC tile, see
+// world/terrain.ts); danger and the point of interest are rolled here, at reveal.
+export function generateHexDetails(terrain: Terrain, rng: Rng = Math.random): GeneratedHexDetails {
   return {
     terrain,
     danger: rollDangerLevel(rng),

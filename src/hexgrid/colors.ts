@@ -20,3 +20,10 @@ export const DANGER_COLORS: Record<DangerLevel, string> = {
   Risky: '#ff7f0e',
   Deadly: '#e53935',
 }
+
+// Overland map features drawn from the WFC tile's edges (M3).
+export const FEATURE_COLORS = {
+  river: '#5aa9e6',
+  lake: '#5aa9e6',
+  road: '#a0522d',
+}

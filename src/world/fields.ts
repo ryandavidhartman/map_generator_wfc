@@ -86,6 +86,16 @@ export function createWorldFields(params: WorldParams, tuning = WORLD_TUNING): W
   }
 }
 
+// Fields for a params object, built once per distinct params (for the worker and the reducer).
+const fieldsByParams = new Map<string, WorldFields>()
+
+export function fieldsFor(params: WorldParams): WorldFields {
+  const key = `${params.seed},${params.offsetX},${params.offsetY}`
+  let f = fieldsByParams.get(key)
+  if (!f) fieldsByParams.set(key, (f = createWorldFields(params)))
+  return f
+}
+
 // Find an offset that puts the origin hex well inside the sea (wantSea) or well inland, so the
 // starting hex agrees with the chosen terrain: every hex within START_CLEARANCE of the origin
 // must be on the right side of sea level (checking only the origin left starts on the coast).

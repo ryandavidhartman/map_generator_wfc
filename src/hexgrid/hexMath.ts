@@ -1,4 +1,6 @@
-// Axial coordinate hex-grid math for a flat-top hexagon layout.
+// Axial coordinate hex-grid math for a pointy-top hexagon layout (the WFC tiles' orientation;
+// map_generator was flat-top until M3). The axial pair (q, r) is the same as the WFC cube
+// coordinates' q and r (s = -q - r).
 // Reference: https://www.redblobgames.com/grids/hexagons/
 
 export type AxialCoord = {
@@ -15,8 +17,8 @@ export function parseHexId(id: string): AxialCoord {
   return { q, r }
 }
 
-// Flat-top axial neighbor directions, ordered starting east and going
-// counter-clockwise.
+// Axial neighbor directions, ordered starting east and going counter-clockwise on screen
+// (E, NE, NW, W, SW, SE).
 const NEIGHBOR_OFFSETS: AxialCoord[] = [
   { q: 1, r: 0 },
   { q: 1, r: -1 },
@@ -37,16 +39,19 @@ export function axialDistance(a: AxialCoord, b: AxialCoord): number {
 export type PixelPoint = { x: number; y: number }
 
 // size = distance from hex center to a corner.
+// Screen y points down, so north (r - 1) is up.
 export function axialToPixel(coord: AxialCoord, size: number): PixelPoint {
-  const x = size * (1.5 * coord.q)
-  const y = size * ((Math.sqrt(3) / 2) * coord.q + Math.sqrt(3) * coord.r)
+  const x = size * Math.sqrt(3) * (coord.q + coord.r / 2)
+  const y = size * 1.5 * coord.r
   return { x, y }
 }
 
+// Corner i sits at -90° + 60°·i (corner 0 is the top point), so the edge facing WFC direction
+// HEX_DIRS[i] (NE, E, SE, SW, W, NW) runs from corner i to corner i + 1.
 export function hexCorners(center: PixelPoint, size: number): PixelPoint[] {
   const corners: PixelPoint[] = []
   for (let i = 0; i < 6; i++) {
-    const angleDeg = 60 * i
+    const angleDeg = -90 + 60 * i
     const angleRad = (Math.PI / 180) * angleDeg
     corners.push({
       x: center.x + size * Math.cos(angleRad),

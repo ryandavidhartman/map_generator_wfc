@@ -22,7 +22,7 @@ describe('zones', () => {
         else expect(['land', 'dryShore']).toContain(n)
       }
     }
-  })
+  }, 30000) // slow on a loaded machine (up to ~9 s seen); the default 5 s timeout made it flaky
 
   it('builds masks that allow only water at sea and no open water on land', () => {
     const rules = getWorldRules()

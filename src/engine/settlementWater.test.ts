@@ -108,18 +108,18 @@ describe('waterForMapHex — reading the overland map', () => {
     expect(angleGap(water!.angle!, angle)).toBeLessThan(1e-9)
   })
 
-  it('uses true screen directions: east is 0, the hex below is +90° (y points down)', () => {
-    const below = NEIGHBORS.find((n) => n.coord.q === 0 && n.coord.r === 1)!
-    const lowerRight = NEIGHBORS.find((n) => n.coord.q === 1 && n.coord.r === 0)!
-    expect(below.angle).toBeCloseTo(Math.PI / 2, 9)
-    expect(lowerRight.angle).toBeCloseTo(Math.PI / 6, 9)
+  it('uses true screen directions on the pointy-top map: east is 0, south-east is +60° (y points down)', () => {
+    const east = NEIGHBORS.find((n) => n.coord.q === 1 && n.coord.r === 0)!
+    const southEast = NEIGHBORS.find((n) => n.coord.q === 0 && n.coord.r === 1)!
+    expect(east.angle).toBeCloseTo(0, 9)
+    expect(southEast.angle).toBeCloseTo(Math.PI / 3, 9)
   })
 
   it('works the same away from the origin (directions are relative to the settlement hex)', () => {
     const at: AxialCoord = { q: 7, r: -4 }
-    const below = hexId({ q: 7, r: -3 })
-    const water = waterForMapHex({ ...at, terrain: 'Grassland' }, { [hexId(at)]: { terrain: 'Grassland' }, [below]: { terrain: 'Ocean' } })
-    expect(water?.angle).toBeCloseTo(Math.PI / 2, 9)
+    const southEast = hexId({ q: 7, r: -3 })
+    const water = waterForMapHex({ ...at, terrain: 'Grassland' }, { [hexId(at)]: { terrain: 'Grassland' }, [southEast]: { terrain: 'Ocean' } })
+    expect(water?.angle).toBeCloseTo(Math.PI / 3, 9)
   })
 
   it('two adjacent Ocean neighbors put the sea between them', () => {

@@ -1,5 +1,5 @@
 // From a solved tile (plus the world fields at its hex) to what the game needs: terrain, and
-// the hex's river, road and sea edges and lake. Pure and local: the same tile and hex always
+// the hex's river, road, sea and coast edges and lake. Pure and local: the same tile and hex always
 // give the same answer, so this is worked out when needed rather than saved.
 //
 // Terrain:
@@ -36,6 +36,7 @@ export type HexGeo = {
   riverEdges: HexDir[]
   roadEdges: HexDir[]
   seaEdges: HexDir[] // edges facing open water
+  coastEdges: HexDir[] // edges the shoreline crosses (half land, half water)
   lake: boolean
 }
 
@@ -46,11 +47,12 @@ export function deriveHexGeo(tile: PlacedTile, fields: WorldFields, tuning = BIO
   const riverEdges = of('river')
   const roadEdges = of('road')
   const seaEdges = of('water')
+  const coastEdges = of('coast')
   const sample = fields.sample(tile)
 
   const terrain = terrainFor(tile, level, seaEdges.length > 0, sample, tuning)
   const lake = terrain !== 'Ocean' && terrain !== 'Coast' && hasLake(tile, fields.params.seed, tuning)
-  return { terrain, level, riverEdges, roadEdges, seaEdges, lake }
+  return { terrain, level, riverEdges, roadEdges, seaEdges, coastEdges, lake }
 }
 
 function terrainFor(tile: PlacedTile, level: number, touchesSea: boolean, f: FieldSample, t: typeof BIOME_TUNING): Terrain {

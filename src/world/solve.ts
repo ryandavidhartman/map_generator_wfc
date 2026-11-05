@@ -10,7 +10,7 @@ import type { RegionSolveResult, TileStore } from '../wfc/recovery'
 import { AdjacencyRules } from '../wfc/rules'
 import type { MaskFor } from '../wfc/solver'
 import { HEX_DIRS, TILE_LIST } from '../wfc/tiles'
-import { createWorldFields, type WorldFields, type WorldParams } from './fields'
+import type { WorldFields } from './fields'
 import { createMaskFor } from './masks'
 import { breakRiverLoops } from './rivers'
 
@@ -71,14 +71,4 @@ export function solveWorldChunk(
   const updates = new Map(result.updates.map((t) => [keyOf(t), t]))
   for (const t of loops.updates) updates.set(keyOf(t), t)
   return { ...result, updates: [...updates.values()], unbrokenRiverLoops: loops.unbroken }
-}
-
-// Fields for a params object, built once per distinct params (for the worker).
-const fieldsByParams = new Map<string, WorldFields>()
-
-export function fieldsFor(params: WorldParams): WorldFields {
-  const key = `${params.seed},${params.offsetX},${params.offsetY}`
-  let f = fieldsByParams.get(key)
-  if (!f) fieldsByParams.set(key, (f = createWorldFields(params)))
-  return f
 }

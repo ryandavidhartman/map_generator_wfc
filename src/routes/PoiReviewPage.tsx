@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { MapProvider, useMapState } from '../state/MapContext'
-import type { MapState } from '../state/mapReducer'
+import { EMPTY_MAP_STATE, type MapState } from '../state/mapReducer'
 import { ALL_TERRAINS, type Terrain } from '../data/tables'
 import { locationFeatureForD200 } from '../data/locationTables'
 import { pointOfInterestForFeatureRoll } from '../engine/generateHex'
@@ -34,7 +34,7 @@ export function PoiReviewPage() {
     if (!rollIsValid) return null
     const poi = pointOfInterestForFeatureRoll(terrain, roll, Math.random)
     const hex = { id: REVIEW_HEX_ID, q: 0, r: 0, terrain, danger: 'Safe' as const, dangerLevel, poi }
-    return { hexes: { [REVIEW_HEX_ID]: hex }, partyHexId: REVIEW_HEX_ID, selectedHexId: REVIEW_HEX_ID }
+    return { ...EMPTY_MAP_STATE, hexes: { [REVIEW_HEX_ID]: hex }, partyHexId: REVIEW_HEX_ID, selectedHexId: REVIEW_HEX_ID }
     // rerollNonce isn't read above — bumping it deliberately forces this memo (and thus the keyed
     // MapProvider below) to recompute with a fresh Math.random() roll for the same feature.
   }, [terrain, roll, rollIsValid, dangerLevel, rerollNonce])

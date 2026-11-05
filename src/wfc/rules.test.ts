@@ -65,7 +65,7 @@ describe('AdjacencyRules', () => {
         })
       })
     })
-  })
+  }, 30000) // slow on a loaded machine (up to ~9 s seen); the default 5 s timeout made it flaky
 
   it('can be built for a subset of tiles', () => {
     const sub = new AdjacencyRules([TILE_TYPE.GRASS, TILE_TYPE.WATER])

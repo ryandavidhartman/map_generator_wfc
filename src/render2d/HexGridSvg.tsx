@@ -2,40 +2,54 @@ import { useEffect, useMemo, useRef, useState, type PointerEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMapDispatch, useMapState } from '../state/MapContext'
 import { isRevealableNow } from '../state/mapReducer'
-import { axialToPixel, computeVisibleCoords, hexId, type AxialCoord } from './hexMath'
+import { axialToPixel, computeVisibleCoords, hexId, parseHexId, type AxialCoord } from '../hexgrid/hexMath'
+import { fieldsFor } from '../world/fields'
+import { placedTileAt } from '../world/hexTiles'
+import { deriveHexGeo, type HexGeo } from '../world/terrain'
 import { HexTile } from './HexTile'
 
 const HEX_SIZE = 40
+const HEX_WIDTH = HEX_SIZE * Math.sqrt(3) // pointy-top: one hex step east
+const INITIAL_VIEW_HEXES = 16 // hexes across the first view, centered on the party
+const MIN_VIEW_HEXES = 4
+const MAX_VIEW_HEXES = 80 // enough for the whole starting world (about 51 hexes across)
 
 type ViewBox = { x: number; y: number; w: number; h: number }
 
-function computeFitViewBox(coords: AxialCoord[], size: number): ViewBox {
-  const points = coords.map((c) => axialToPixel(c, size))
-  const pad = size * 1.4
-  const xs = points.map((p) => p.x)
-  const ys = points.map((p) => p.y)
-  const minX = Math.min(...xs) - pad
-  const maxX = Math.max(...xs) + pad
-  const minY = Math.min(...ys) - pad
-  const maxY = Math.max(...ys) + pad
-  return { x: minX, y: minY, w: maxX - minX, h: maxY - minY }
+function viewAround(center: AxialCoord, hexesAcross: number): ViewBox {
+  const p = axialToPixel(center, HEX_SIZE)
+  const w = hexesAcross * HEX_WIDTH
+  const h = w * 0.65
+  return { x: p.x - w / 2, y: p.y - h / 2, w, h }
 }
 
-export function HexGridSvg() {
+// Player view: revealed hexes and their unexplored frontier. GM view (`gmView`): every solved
+// hex too, unrevealed ones dimmed.
+export function HexGridSvg({ gmView = false }: { gmView?: boolean }) {
   const state = useMapState()
   const dispatch = useMapDispatch()
   const navigate = useNavigate()
   const svgRef = useRef<SVGSVGElement>(null)
   const dragOrigin = useRef<{ x: number; y: number } | null>(null)
-  const coords = useMemo(
-    () => computeVisibleCoords(Object.values(state.hexes).map((hex) => ({ q: hex.q, r: hex.r }))),
-    [state.hexes],
+  // Every solved hex's geography, worked out from its tile (only when the tiles change).
+  const geo = useMemo(() => {
+    const out = new Map<string, HexGeo>()
+    if (!state.world) return out
+    const fields = fieldsFor(state.world)
+    for (const id of Object.keys(state.tiles)) out.set(id, deriveHexGeo(placedTileAt(state.tiles, id)!, fields))
+    return out
+  }, [state.world, state.tiles])
+  const coords = useMemo(() => {
+    const visible = computeVisibleCoords(Object.values(state.hexes).map((hex) => ({ q: hex.q, r: hex.r })))
+    if (!gmView) return visible
+    const ids = new Set(visible.map(hexId))
+    return [...visible, ...Object.keys(state.tiles).filter((id) => !ids.has(id)).map(parseHexId)]
+  }, [state.hexes, state.tiles, gmView])
+  // Set once per mount (lazy initializer), not on every reveal: re-centering every time the
+  // party moves would keep yanking the view out from under a GM who has panned or zoomed.
+  const [viewBox, setViewBox] = useState<ViewBox>(() =>
+    viewAround(state.partyHexId ? parseHexId(state.partyHexId) : { q: 0, r: 0 }, INITIAL_VIEW_HEXES),
   )
-  // Computed once per mount (lazy initializer), not on every reveal — the map is
-  // unbounded now, so refitting every time the frontier grows would keep yanking
-  // the view out from under a GM who has panned/zoomed to a spot of interest.
-  const [fitViewBox] = useState<ViewBox>(() => computeFitViewBox(coords, HEX_SIZE))
-  const [viewBox, setViewBox] = useState<ViewBox>(fitViewBox)
 
   function handlePointerDown(e: PointerEvent<SVGSVGElement>) {
     dragOrigin.current = { x: e.clientX, y: e.clientY }
@@ -73,8 +87,8 @@ export function HexGridSvg() {
       const factor = e.deltaY > 0 ? 1.1 : 1 / 1.1
 
       setViewBox((vb) => {
-        const minW = fitViewBox.w * 0.2
-        const maxW = fitViewBox.w * 1.5
+        const minW = MIN_VIEW_HEXES * HEX_WIDTH
+        const maxW = MAX_VIEW_HEXES * HEX_WIDTH
         const newW = Math.min(maxW, Math.max(minW, vb.w * factor))
         const scale = newW / vb.w
         const newH = vb.h * scale
@@ -91,7 +105,7 @@ export function HexGridSvg() {
 
     svg.addEventListener('wheel', handleWheelNative, { passive: false })
     return () => svg.removeEventListener('wheel', handleWheelNative)
-  }, [fitViewBox])
+  }, [])
 
   return (
     <svg
@@ -112,6 +126,8 @@ export function HexGridSvg() {
             coord={coord}
             size={HEX_SIZE}
             hex={hex}
+            geo={geo.get(id) ?? null}
+            showHidden={gmView}
             isParty={state.partyHexId === id}
             isSelected={state.selectedHexId === id}
             isRevealable={isRevealableNow(state, id)}

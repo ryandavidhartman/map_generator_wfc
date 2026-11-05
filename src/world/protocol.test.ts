@@ -3,9 +3,9 @@ import { tilesNearChunk } from '../wfc/chunks'
 import { keyOf } from '../wfc/cube'
 import type { TileStore } from '../wfc/recovery'
 import { WfcClient, type WorkerLike } from './client'
-import type { WorldParams } from './fields'
+import { fieldsFor, type WorldParams } from './fields'
 import { handleSolveChunkRequest, type SolveChunkRequest, type SolveChunkResponse } from './protocol'
-import { fieldsFor, solveWorldChunk } from './solve'
+import { solveWorldChunk } from './solve'
 
 const world = (seed: number): WorldParams => ({ seed, offsetX: 0, offsetY: 0 })
 

@@ -5,7 +5,7 @@ felixturner/hex-map-wfc) generates the overland map. Clicking into a hex opens t
 site generators forked from `~/dev/source/map_generator`.
 
 **The plan, the decisions and the milestones are in `docs/PLAN.md`, which is committed.**
-Read it first. Status (2026-11-04): **M0, M1 and M2 done.**
+Read it first. Status (2026-11-05): **M0-M3 done.**
 - M0: map_generator forked in. The save key is renamed to `wfc-hex-crawl:map`, so this
   app's saves stay separate from map_generator's on localhost:5173.
 - M1: the WFC solver is ported to TypeScript in `src/wfc/` (see PLAN.md's M1 entry for what
@@ -13,9 +13,13 @@ Read it first. Status (2026-11-04): **M0, M1 and M2 done.**
 - M2: the world layer in `src/world/` (fields, zone masks, world solver, terrain derivation).
   Terrain is now 8 types (Coast, Hills). PLAN.md section 2 has the design and the measured
   numbers.
+- M3: `MapState` holds the solved world (`world`, `chunks`, `tiles`, `version`). The start
+  dialog builds it with `createStartingWorld` (7 chunks, in the worker) and the reducer reveals
+  hexes from their tiles. The 2D map in `src/render2d/` is pointy-top with rivers, roads, lakes,
+  coast shapes and a GM view.
 
-M3 (state and 2D map, first playable version) is next. The suite takes about 23 s, mostly the
-WFC and world tests.
+M4 (3D map) is next; M5 (chunk growth) lets the party leave the starting 7 chunks. The suite
+takes about 25-30 s, mostly the WFC and world tests.
 
 `docs/reference/map_generator-CLAUDE.md` is a snapshot of map_generator's CLAUDE.md as of the
 fork: its architecture notes for the site generators, state and tables still apply here. Its
@@ -35,7 +39,10 @@ copied.
 - The tsconfig isn't `strict`, so TypeScript can't narrow a union on a boolean flag. Use one
   object shape instead (see `AttemptResult` in `recovery.ts`).
 - Hex game data (danger, `dangerLevel`, point of interest) is rolled at reveal, not when the
-  map is generated.
+  map is generated. Terrain comes from the tile (`geoAt`); `hexes` holds only revealed hexes.
+- The reducer is synchronous: WFC solves run in the worker first (e.g. `createStartingWorld`)
+  and the result is dispatched. Tests solve with `handleSolveChunkRequest` directly
+  (`startWorld.test.ts`) or use the fixture world in `src/state/testWorld.ts`.
 - Rules carried over from map_generator's CLAUDE.md: tables are transcribed verbatim; visual
   changes start from a reference image; drawing derives from saved data; don't name any other
   game, publisher or rulebook; don't commit unless asked.

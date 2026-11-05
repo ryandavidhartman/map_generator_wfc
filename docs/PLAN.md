@@ -47,8 +47,9 @@ Written 2026-11-04. All numbers are starting points to tune by simulation.
 
 - Campaign start: the GM picks a seed (or Random) and a starting terrain. `placeWorld` puts
   the start hex inland or at sea to match (section 4), and WFC solves the first chunk around
-  it. A specific land terrain (e.g. Forest) still needs a matching start hex; that's M3's job
-  (search near the origin for a hex whose derived terrain matches, and shift the world to it).
+  it. For a specific land terrain (e.g. Forest), the start is the hex nearest the origin in
+  chunk 0 whose derived terrain matches, so it isn't always (0, 0); if chunk 0 has none, a new
+  seed is tried (`src/world/startWorld.ts`, built in M3).
 - Tiles come from hex-map-wfc's 34 active tile types × 6 rotations × up to 5 levels (about
   900 states), with its edge rules and weights (river tiles ×1.6, section 2). Roads come free.
 - The solve runs in a Web Worker (`src/world/solver.worker.ts`), with hex-map-wfc's
@@ -105,7 +106,8 @@ of the tile and the fields at its hex, so it's worked out when needed, not saved
   picked by a hash of the seed and hex (stable, no noise needed). hex-map-wfc has no lake tile.
 - **Terrain changes done:** River/coast is renamed Coast, and Hills is added, with all its
   existing content wired into the seven terrain-keyed tables. `ALL_TERRAINS` (8 terrains) drives
-  the pickers and legend; `TERRAIN_ORDER` (7) stays for the old 2d6 reveal rules until M3.
+  the pickers and legend. M3 retired the old 2d6 reveal rules (`TERRAIN_ORDER`, the Hex Terrain
+  and New Hex tables); the start dialog's Random button rolls 1a's 3d6 table (`terrainFor3d6`).
 
 **Measured** with `npm run sim -- --seeds 40` (40 worlds of 19 chunks, about 4,100 hexes each;
 0 failed solves, 0 dropped cells, about 73 ms per chunk):
@@ -219,8 +221,14 @@ src/
     protocol.ts       worker request/response (moved from wfc/ in M2)
     solver.worker.ts  the Web Worker (just calls protocol.ts)
     client.ts         WfcClient: promise wrapper around the worker
+    hexTiles.ts       saved tiles ([type, rotation, level] by hex id) <-> TileStore, geoAt (M3)
+    startWorld.ts     createStartingWorld: place, solve chunk 0, find the start hex, solve ring 1 (M3)
+    workerSolver.ts   the app's ChunkSolver, backed by one shared worker (M3)
     (M5) growth trigger; (M6) anchors.ts, settlement anchors
-  render2d/    ← map_generator's HexGridSvg, reworked for tiles and pointy-top
+  render2d/    ← map_generator's HexGridSvg, reworked for tiles and pointy-top (built in M3)
+    HexGridSvg.tsx    pan/zoom map; player view or GM view
+    HexTile.tsx       one hex: fill, coast water, lake, river, road, fog/dimming, markers
+    tileShapes.ts     river/road/coast SVG paths from the tile's edges
   render3d/    ← ported from hex-map-wfc: HexTiles, Decorations, Water, Lighting, PostFX
     ThreeMapView.tsx  React wrapper (owns the canvas and renderer lifecycle)
   hexgrid/     ← map_generator's site map renderers (Dungeon/Settlement/…), unchanged
@@ -290,10 +298,32 @@ and solved 3 chunks (651 tiles, no mismatches or drops). Changes to M1's `wfc/` 
 - The worker protocol moved to `world/`, because the worker now needs the world fields. A
   request carries `WorldParams` instead of a bare seed.
 
-**M3 — State and 2D map.** `MapState` gains the world fields. `START_MAP` solves chunk 0, and
-`MOVE_PARTY_TO` reveals and rolls as today. Rework `HexGridSvg` for pointy-top: terrain fill,
-river and road lines along real edges, coast shapes, fog, the GM view toggle. The hex detail
-page works end to end. **First playable version.**
+**M3 — State and 2D map. ✅ Done 2026-11-05.** The first playable version.
+- **State:** `MapState` gains `version` (1), `world` (WorldParams), `chunks` and `tiles`
+  (`{ hexId: [type, rotation, level] }`). A save with another version, or none (map_generator
+  style), starts a new map. Solved isn't revealed: `hexes` are still only the revealed hexes.
+- **Start:** the reducer can't wait on the worker, so the start dialog calls
+  `createStartingWorld` (seed, terrain, solver) and dispatches `START_MAP` with the solved
+  world. It solves chunk 0, picks the start hex (section 1), then solves the six chunks around
+  it: 7 chunks, 1,519 hexes, at least 9 hexes past chunk 0's edge. Measured in the browser:
+  0.46-1.06 s (the slow case is a second seed for Desert/arctic).
+- **Reveal:** `MOVE_PARTY_TO` reads the new hex's terrain from its tile (`geoAt`), then rolls
+  danger and the POI as before (`generateHexDetails`). An unsolved hex can't be revealed, so
+  until M5 the party can't leave the 7 chunks.
+- **2D map** (`src/render2d/`): pointy-top (`hexMath.ts` switched, so the settlement map's
+  coast direction now uses pointy-top angles too). Revealed hexes draw their terrain fill,
+  danger border, and from the tile: rivers (curves edge to edge), roads (dashed), lakes (oval)
+  and the water side of coast hexes. The GM view toggle (toolbar, remembered per browser) draws
+  every solved hex, dimmed where unrevealed, with its terrain in a tooltip. The view opens 16
+  hexes wide on the party and zooms from 4 to 80 hexes.
+- `fieldsFor` moved from `world/solve.ts` to `world/fields.ts`, so the reducer doesn't import
+  the solver. `HexGeo` gained `coastEdges`.
+- Roads are drawn only; they have no game effect yet (open question 3).
+- 12 new tests (1,089 in all). Three older heavy tests (chunk lattice, adjacency masks, zones)
+  got explicit 30 s timeouts: on a loaded machine they ran up to ~9 s and hit Vitest's 5 s
+  default, on the committed M2 code too. Browser check (production build, headless Chromium): starts on
+  Forest/jungle, Desert/arctic, Mountain and Ocean; walking reveals hexes with tile terrain;
+  GM view draws all 1,519 tiles; double-click opens the hex detail page.
 
 **M4 — 3D map.** Port the renderer, decorations, water, lighting and post-processing into
 `render3d/`. Add biome tinting (Swamp/Desert on grass tiles), forest trees driven by biome,

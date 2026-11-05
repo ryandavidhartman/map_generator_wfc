@@ -1,7 +1,6 @@
 import type { Rng } from '../engine/dice'
 import {
-  generateNextHexDetails,
-  generateStartingHexDetails,
+  generateHexDetails,
   rollDangerLevel,
   rollPointOfInterest,
   type PointOfInterest,
@@ -9,6 +8,8 @@ import {
 import { generateSiteForHex, type GeneratedSite } from '../engine/generateSite'
 import { dangerLevelDelta, type DangerLevel, type Terrain } from '../data/tables'
 import { hexId, neighborsOf, parseHexId, type AxialCoord } from '../hexgrid/hexMath'
+import type { WorldParams } from '../world/fields'
+import { geoAt, type SavedTiles } from '../world/hexTiles'
 
 export type Hex = {
   id: string
@@ -25,13 +26,30 @@ export type Hex = {
   site?: GeneratedSite
 }
 
+// Bumped when the save format changes in a way old saves can't be read with. A save with any
+// other version starts a new map (all saves so far are test data, so nothing is migrated).
+export const SAVE_VERSION = 1
+
 export type MapState = {
+  version: number
+  // The world the map is solved from (null before a campaign starts).
+  world: WorldParams | null
+  // Solved chunks (chunkKey) and their tiles, keyed by hex id. A hex's terrain, rivers, roads
+  // and coast are derived from its tile (world/terrain.ts). Solved isn't revealed: only
+  // `hexes` are revealed.
+  chunks: string[]
+  tiles: SavedTiles
+  // Revealed hexes and their game data, rolled at reveal.
   hexes: Record<string, Hex>
   partyHexId: string | null
   selectedHexId: string | null
 }
 
 export const EMPTY_MAP_STATE: MapState = {
+  version: SAVE_VERSION,
+  world: null,
+  chunks: [],
+  tiles: {},
   hexes: {},
   partyHexId: null,
   selectedHexId: null,
@@ -40,9 +58,11 @@ export const EMPTY_MAP_STATE: MapState = {
 // Merges a loaded save over EMPTY_MAP_STATE rather than using it directly — a save from before a
 // top-level MapState field existed would otherwise come back `undefined` at runtime despite the
 // type saying otherwise. Per-hex fields (e.g. Hex.dangerLevel) aren't covered by this merge; a
-// field that's present but needs content needs an explicit backfill here.
+// field that's present but needs content needs an explicit backfill here. A save from another
+// version (including map_generator-style saves, which have none) starts a new map.
 export function withMapStateDefaults(loaded: Partial<MapState> | null): MapState {
-  return loaded ? { ...EMPTY_MAP_STATE, ...loaded } : EMPTY_MAP_STATE
+  if (!loaded || loaded.version !== SAVE_VERSION) return EMPTY_MAP_STATE
+  return { ...EMPTY_MAP_STATE, ...loaded }
 }
 
 export type HexEditPatch = Partial<Pick<Hex, 'terrain' | 'danger' | 'dangerLevel' | 'poi'>>
@@ -63,7 +83,9 @@ function computeHexDangerLevel(state: MapState, coord: AxialCoord, danger: Dange
 }
 
 export type MapAction =
-  | { type: 'START_MAP'; terrain: Terrain; rng?: Rng }
+  // The world comes already solved (world/startWorld.ts runs the WFC worker, which a reducer
+  // can't wait on). The starting hex's terrain is read from its tile.
+  | { type: 'START_MAP'; world: WorldParams; chunks: string[]; tiles: SavedTiles; startHexId: string; rng?: Rng }
   | { type: 'MOVE_PARTY_TO'; hexId: string; rng?: Rng }
   | { type: 'SELECT_HEX'; hexId: string }
   | { type: 'REROLL_HEX'; hexId: string; rng?: Rng }
@@ -82,21 +104,38 @@ export function isAdjacentToParty(state: MapState, id: string): boolean {
   return neighborsOf(party).some((n) => hexId(n) === id)
 }
 
-// Whether clicking this (unrevealed) hex right now would generate it.
+export function isSolved(state: MapState, id: string): boolean {
+  return id in state.tiles
+}
+
+// Whether clicking this (unrevealed) hex right now would generate it. The hex must be solved:
+// the party can't walk off the solved map (chunk growth comes in M5).
 export function isRevealableNow(state: MapState, id: string): boolean {
   if (isRevealed(state, id)) return false
-  return isAdjacentToParty(state, id)
+  return isSolved(state, id) && isAdjacentToParty(state, id)
+}
+
+// The terrain a hex reveals as: its tile's derived terrain.
+function terrainAt(state: MapState, id: string): Terrain | null {
+  if (!state.world) return null
+  return geoAt(state.world, state.tiles, id)?.terrain ?? null
 }
 
 export function mapReducer(state: MapState, action: MapAction): MapState {
   switch (action.type) {
     case 'START_MAP': {
-      const origin = { q: 0, r: 0 }
-      const id = hexId(origin)
-      const details = generateStartingHexDetails(action.terrain, action.rng)
+      const id = action.startHexId
+      const coord = parseHexId(id)
+      const terrain = geoAt(action.world, action.tiles, id)?.terrain
+      if (!terrain) return state
+      const details = generateHexDetails(terrain, action.rng)
       // No neighbors exist yet — the starting hex is always Danger Level 1, fixed.
-      const startHex: Hex = { id, q: origin.q, r: origin.r, ...details, dangerLevel: 1 }
+      const startHex: Hex = { id, q: coord.q, r: coord.r, ...details, dangerLevel: 1 }
       return {
+        version: SAVE_VERSION,
+        world: action.world,
+        chunks: action.chunks,
+        tiles: action.tiles,
         hexes: { [id]: startHex },
         partyHexId: id,
         selectedHexId: id,
@@ -112,10 +151,10 @@ export function mapReducer(state: MapState, action: MapAction): MapState {
       }
 
       const coord = parseHexId(action.hexId)
-      if (!state.partyHexId) return state
+      const terrain = terrainAt(state, action.hexId)
+      if (!terrain) return state
 
-      const currentTerrain = state.hexes[state.partyHexId].terrain
-      const details = generateNextHexDetails(currentTerrain, action.rng)
+      const details = generateHexDetails(terrain, action.rng)
       const dangerLevel = computeHexDangerLevel(state, coord, details.danger)
       const newHex: Hex = { id: action.hexId, q: coord.q, r: coord.r, ...details, dangerLevel }
 

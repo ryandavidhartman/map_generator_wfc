@@ -1,8 +1,8 @@
-// Overland tables: terrain order and stepping, Hex Terrain 2d6, New Hex 2d6, Danger d6 (dice
-// structure from the core rules; terrain and danger names are plain generic labels), plus the
-// Settlement Name table (original names).
+// Overland tables: Starting Terrain 3d6 (punch-list 1a), Danger d6 (dice structure from the core
+// rules; terrain and danger names are plain generic labels), plus the Settlement Name table
+// (original names).
 
-// Coast was "Coast" until M2 (rivers are now a hex feature, not a terrain); Hills was
+// Coast was "River/coast" until M2 (rivers are now a hex feature, not a terrain); Hills was
 // added in M2. See docs/PLAN.md.
 export type Terrain =
   | 'Desert/arctic'
@@ -26,49 +26,19 @@ export const ALL_TERRAINS: Terrain[] = [
   'Mountain',
 ]
 
-// Circular loop order used for New Hex terrain stepping (the original 2d6 reveal rules, used
-// until the WFC map replaces them in M3). Hills isn't part of these rules.
-export const TERRAIN_ORDER: Terrain[] = [
-  'Desert/arctic',
-  'Swamp',
-  'Grassland',
-  'Forest/jungle',
-  'Coast',
-  'Ocean',
-  'Mountain',
-]
-
-export function stepTerrain(terrain: Terrain, steps: number): Terrain {
-  const from = TERRAIN_ORDER.indexOf(terrain)
-  const len = TERRAIN_ORDER.length
-  const next = ((from + steps) % len + len) % len
-  return TERRAIN_ORDER[next]
-}
-
-// Hex Terrain table (2d6) — rolls a fresh terrain.
-export function terrainFor2d6(roll: number): Terrain {
-  if (roll === 2) return 'Desert/arctic'
-  if (roll === 3) return 'Swamp'
-  if (roll >= 4 && roll <= 6) return 'Grassland'
-  if (roll >= 7 && roll <= 8) return 'Forest/jungle'
-  if (roll >= 9 && roll <= 10) return 'Coast'
-  if (roll === 11) return 'Ocean'
-  if (roll === 12) return 'Mountain'
-  throw new Error(`terrainFor2d6: roll out of range: ${roll}`)
-}
-
-// New Hex table (2d6) — relative to the terrain of the hex being left.
-export type NewHexResult =
-  | { kind: 'step'; steps: 1 | 2 }
-  | { kind: 'same' }
-  | { kind: 'reroll' }
-
-export function newHexResultFor2d6(roll: number): NewHexResult {
-  if (roll >= 2 && roll <= 3) return { kind: 'step', steps: 1 }
-  if (roll >= 4 && roll <= 8) return { kind: 'same' }
-  if (roll >= 9 && roll <= 11) return { kind: 'step', steps: 2 }
-  if (roll === 12) return { kind: 'reroll' }
-  throw new Error(`newHexResultFor2d6: roll out of range: ${roll}`)
+// Starting Terrain table (3d6), from punch-list item 1a's base frequencies, transcribed verbatim.
+// The start dialog's Random button rolls it, Ocean row included. (The old 2d6 Hex Terrain and
+// New Hex tables were retired in M3: terrain now comes from the WFC map.)
+export function terrainFor3d6(roll: number): Terrain {
+  if (roll >= 3 && roll <= 4) return 'Desert/arctic'
+  if (roll >= 5 && roll <= 6) return 'Swamp'
+  if (roll >= 7 && roll <= 9) return 'Grassland'
+  if (roll >= 10 && roll <= 11) return 'Forest/jungle'
+  if (roll === 12) return 'Hills'
+  if (roll >= 13 && roll <= 14) return 'Coast'
+  if (roll >= 15 && roll <= 16) return 'Ocean'
+  if (roll >= 17 && roll <= 18) return 'Mountain'
+  throw new Error(`terrainFor3d6: roll out of range: ${roll}`)
 }
 
 // Danger Level table (d6).

@@ -8,8 +8,8 @@ import type { ChunkCoord } from '../wfc/chunks'
 import { keyOf, type Cube } from '../wfc/cube'
 import type { RegionSolveStats, TileStore } from '../wfc/recovery'
 import type { PlacedTile } from '../wfc/rules'
-import type { WorldParams } from './fields'
-import { fieldsFor, solveWorldChunk } from './solve'
+import { fieldsFor, type WorldParams } from './fields'
+import { solveWorldChunk } from './solve'
 
 export type SolveChunkRequest = {
   id: number

@@ -26,6 +26,16 @@
   background: #3f4250;
 }
 
+.toolbar button.active {
+  background: #4b5563;
+  border-color: #9ca3af;
+}
+
+.toolbar-seed {
+  color: #9ca3af;
+  font-size: 0.8rem;
+}
+
 .toolbar-actions {
   display: flex;
   align-items: center;
@@ -461,4 +471,25 @@ button.primary:hover {
 
 .swatch-dot {
   border-radius: 50%;
+}
+
+.swatch-line {
+  height: 0;
+  border-radius: 0;
+  border-top: 3px solid;
+}
+
+.swatch-line.dashed {
+  border-top-style: dashed;
+}
+
+.start-progress {
+  margin: 0;
+  color: #9ca3af;
+  font-size: 0.85rem;
+}
+
+.start-error {
+  margin: 0;
+  color: #f87171;
 }

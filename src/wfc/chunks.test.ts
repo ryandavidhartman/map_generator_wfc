@@ -31,7 +31,7 @@ describe('chunk lattice', () => {
         expect(cubeDistance(chunkCenter(n), h)).toBeGreaterThan(CHUNK_RADIUS)
       }
     }
-  })
+  }, 30000) // slow on a loaded machine (up to ~9 s seen); the default 5 s timeout made it flaky
 
   it('has neighbors 17 hexes away that share a border', () => {
     const cells0 = new Set(chunkCells({ i: 0, j: 0 }).map(keyOf))

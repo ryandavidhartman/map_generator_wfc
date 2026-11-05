@@ -1,6 +1,7 @@
 import './App.css'
 import { Routes, Route } from 'react-router-dom'
-import { HexGridSvg } from './hexgrid/HexGridSvg'
+import { useState } from 'react'
+import { HexGridSvg } from './render2d/HexGridSvg'
 import { StartMapDialog } from './components/StartMapDialog'
 import { Toolbar } from './components/Toolbar'
 import { Legend } from './components/Legend'
@@ -8,8 +9,31 @@ import { HexDetailPage } from './routes/HexDetailPage'
 import { PoiReviewPage } from './routes/PoiReviewPage'
 import { MapProvider, useMapState } from './state/MapContext'
 
+const GM_VIEW_KEY = 'wfc-hex-crawl:gmView'
+
+// GM view is a per-browser viewing preference, not campaign data, so it's kept apart from the save.
+function loadGmView(): boolean {
+  try {
+    return localStorage.getItem(GM_VIEW_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
 function OverlandMapScreen() {
   const state = useMapState()
+  const [gmView, setGmView] = useState(loadGmView)
+
+  function toggleGmView() {
+    setGmView((on) => {
+      try {
+        localStorage.setItem(GM_VIEW_KEY, on ? '0' : '1')
+      } catch {
+        // storage unavailable: the toggle still works for this session
+      }
+      return !on
+    })
+  }
 
   if (!state.partyHexId) {
     return (
@@ -24,10 +48,10 @@ function OverlandMapScreen() {
 
   return (
     <>
-      <Toolbar />
+      <Toolbar gmView={gmView} onToggleGmView={toggleGmView} />
       <div className="app-body">
         <div className="map-area">
-          <HexGridSvg />
+          <HexGridSvg gmView={gmView} />
           <Legend />
         </div>
       </div>

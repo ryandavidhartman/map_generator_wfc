@@ -9,13 +9,16 @@ import { renderToString } from 'react-dom/server'
 import { MemoryRouter } from 'react-router-dom'
 import App from '../App'
 import { HexSiteContent } from './hexdetail/HexSiteContent'
-import { HexGridSvg } from '../hexgrid/HexGridSvg'
+import { HexGridSvg } from '../render2d/HexGridSvg'
 import { MapProvider } from '../state/MapContext'
 import { EMPTY_MAP_STATE, mapReducer, type Hex, type MapState } from '../state/mapReducer'
 import { ALL_TERRAINS, type Terrain } from '../data/tables'
 import { pointOfInterestForFeatureRoll } from '../engine/generateHex'
 import { generateSiteForHex } from '../engine/generateSite'
 import { computeVisibleCoords } from '../hexgrid/hexMath'
+import { FEATURE_COLORS, TERRAIN_COLORS } from '../hexgrid/colors'
+import { TILE_TYPE } from '../wfc/tiles'
+import { FIXTURE_TILES, FIXTURE_WORLD, startMapAction } from '../state/testWorld'
 
 function seededRng(seed: number): () => number {
   let state = seed >>> 0
@@ -36,7 +39,7 @@ function stateForFeature(roll: number, terrain: Terrain, seed: number, dangerLev
   const hex: Hex = { id: HEX_ID, q: 0, r: 0, terrain, danger: 'Risky', dangerLevel, poi, site }
   const hexes: MapState['hexes'] = { [HEX_ID]: hex }
   if (seed % 2 === 1) hexes['1,0'] = { id: '1,0', q: 1, r: 0, terrain: 'Ocean', danger: 'Safe', dangerLevel }
-  return { state: { hexes, partyHexId: HEX_ID, selectedHexId: HEX_ID }, hex }
+  return { state: { ...EMPTY_MAP_STATE, world: FIXTURE_WORLD, tiles: FIXTURE_TILES, hexes, partyHexId: HEX_ID, selectedHexId: HEX_ID }, hex }
 }
 
 function renderSite(state: MapState, hex: Hex): string {
@@ -121,7 +124,7 @@ describe('site views render every Feature-table row', () => {
 
   it('a hex with no point of interest renders the wilderness view', () => {
     const hex: Hex = { id: HEX_ID, q: 0, r: 0, terrain: 'Forest/jungle', danger: 'Safe', dangerLevel: 1 }
-    const html = renderSite({ hexes: { [HEX_ID]: hex }, partyHexId: HEX_ID, selectedHexId: HEX_ID }, hex)
+    const html = renderSite({ ...EMPTY_MAP_STATE, hexes: { [HEX_ID]: hex }, partyHexId: HEX_ID, selectedHexId: HEX_ID }, hex)
     expectCleanMarkup(html)
     expect(html).not.toContain('<svg')
   })
@@ -130,25 +133,54 @@ describe('site views render every Feature-table row', () => {
 describe('overland map', () => {
   function walkedMap(steps: number): MapState {
     const rng = seededRng(42)
-    let state = mapReducer(EMPTY_MAP_STATE, { type: 'START_MAP', terrain: 'Grassland', rng })
+    let state = mapReducer(EMPTY_MAP_STATE, { ...startMapAction(), rng })
     for (let q = 1; q <= steps; q++) state = mapReducer(state, { type: 'MOVE_PARTY_TO', hexId: `${q},0`, rng })
     state = mapReducer(state, { type: 'MOVE_PARTY_TO', hexId: `${steps},1`, rng })
     return state
   }
 
-  it('draws one tile per revealed hex plus its unrevealed frontier', () => {
-    const state = walkedMap(12)
-    const html = renderToString(
+  function renderMap(state: MapState, gmView = false): string {
+    return renderToString(
       <MemoryRouter>
         <MapProvider initialState={state} persist={false}>
-          <HexGridSvg />
+          <HexGridSvg gmView={gmView} />
         </MapProvider>
       </MemoryRouter>,
     )
+  }
+
+  it('draws one tile per revealed hex plus its unrevealed frontier', () => {
+    const state = walkedMap(12)
+    const html = renderMap(state)
     expectCleanMarkup(html)
     const revealed = Object.values(state.hexes).map(({ q, r }) => ({ q, r }))
     expect(count(html, 'data-hex-id=')).toBe(computeVisibleCoords(revealed).length)
     for (const id of Object.keys(state.hexes)) expect(html).toContain(`data-hex-id="${id}"`)
+    // The walk went through the fixture's water hex (2,0), which revealed as Ocean.
+    expect(html).toContain('<title>Ocean')
+  })
+
+  it('GM view also draws every solved hex, with its terrain in the tooltip', () => {
+    // A smaller solved area than the fixture's, to keep the render quick.
+    const base = walkedMap(3)
+    const tiles = Object.fromEntries(Object.entries(base.tiles).filter(([id]) => id.split(',').every((n) => Math.abs(Number(n)) <= 6)))
+    const state = { ...base, tiles }
+    const html = renderMap(state, true)
+    expectCleanMarkup(html)
+    const ids = new Set([...Object.keys(tiles), ...computeVisibleCoords(Object.values(state.hexes)).map(({ q, r }) => `${q},${r}`)])
+    expect(count(html, 'data-hex-id=')).toBe(ids.size)
+    expect(html).toContain('<title>Unrevealed: ')
+  })
+
+  it('draws rivers, roads and the water side of a coast from the tile', () => {
+    const base = walkedMap(1)
+    // (0,-1) (north of the start, unrevealed): a river bend; (1,-1): a road; (-1,0): a coast.
+    const tiles: MapState['tiles'] = { ...base.tiles, '0,-1': [TILE_TYPE.RIVER_B, 0, 0], '1,-1': [TILE_TYPE.ROAD_A, 0, 0], '-1,0': [TILE_TYPE.COAST_A, 0, 0] }
+    const html = renderMap({ ...base, tiles }, true)
+    expectCleanMarkup(html)
+    expect(html).toContain(`stroke="${FEATURE_COLORS.river}"`)
+    expect(html).toContain(`stroke="${FEATURE_COLORS.road}"`)
+    expect(html).toContain(`fill="${TERRAIN_COLORS.Ocean}"`)
   })
 })
 

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { loadMapState, saveMapState } from './localStorage'
-import { EMPTY_MAP_STATE, mapReducer, withMapStateDefaults, type MapState } from '../state/mapReducer'
+import { EMPTY_MAP_STATE, mapReducer, SAVE_VERSION, withMapStateDefaults, type MapState } from '../state/mapReducer'
+import { startMapAction } from '../state/testWorld'
 import { locationFeatureForD200 } from '../data/locationTables'
 import { pointOfInterestForFeatureRoll } from '../engine/generateHex'
 import { generateSiteForHex } from '../engine/generateSite'
@@ -30,7 +31,7 @@ function memoryStorage() {
 // A map with one revealed hex per site kind (plus a no-site hex), every site fully generated —
 // the realistic shape of a save, so the round-trip test covers every generator's output.
 function mapWithEverySiteKind(): MapState {
-  let state = mapReducer(EMPTY_MAP_STATE, { type: 'START_MAP', terrain: 'Grassland', rng: seededRng(1) })
+  let state = mapReducer(EMPTY_MAP_STATE, { ...startMapAction(), rng: seededRng(1) })
   const seen = new Set<string>()
   let q = 1
   for (let roll = 1; roll <= 200; roll++) {
@@ -61,15 +62,21 @@ describe('withMapStateDefaults', () => {
 
   it('fills top-level fields missing from an older save, keeping the ones it has', () => {
     const hexes: MapState['hexes'] = { '0,0': { id: '0,0', q: 0, r: 0, terrain: 'Forest/jungle', danger: 'Safe', dangerLevel: 1 } }
-    const merged = withMapStateDefaults({ hexes, partyHexId: '0,0' })
+    const merged = withMapStateDefaults({ version: SAVE_VERSION, hexes, partyHexId: '0,0' })
     expect(merged.hexes).toBe(hexes)
     expect(merged.partyHexId).toBe('0,0')
     expect(merged.selectedHexId).toBe(EMPTY_MAP_STATE.selectedHexId)
     expect(Object.keys(merged).sort()).toEqual(Object.keys(EMPTY_MAP_STATE).sort())
   })
 
+  it('starts a new map for a save from another version, or with none (map_generator-style)', () => {
+    const hexes: MapState['hexes'] = { '0,0': { id: '0,0', q: 0, r: 0, terrain: 'Forest/jungle', danger: 'Safe', dangerLevel: 1 } }
+    expect(withMapStateDefaults({ hexes, partyHexId: '0,0' })).toBe(EMPTY_MAP_STATE)
+    expect(withMapStateDefaults({ version: SAVE_VERSION + 1, hexes, partyHexId: '0,0' })).toBe(EMPTY_MAP_STATE)
+  })
+
   it('lets saved values win over the defaults', () => {
-    const merged = withMapStateDefaults({ hexes: {}, partyHexId: '1,0', selectedHexId: '1,0' })
+    const merged = withMapStateDefaults({ version: SAVE_VERSION, hexes: {}, partyHexId: '1,0', selectedHexId: '1,0' })
     expect(merged.selectedHexId).toBe('1,0')
   })
 })
@@ -125,7 +132,7 @@ describe('saveMapState / loadMapState', () => {
 
   it('a save missing a top-level field loads with that field defaulted', () => {
     const storage = memoryStorage()
-    storage.setItem(STORAGE_KEY, JSON.stringify({ hexes: {}, partyHexId: null }))
+    storage.setItem(STORAGE_KEY, JSON.stringify({ version: SAVE_VERSION, hexes: {}, partyHexId: null }))
     vi.stubGlobal('localStorage', storage)
     expect(withMapStateDefaults(loadMapState())).toEqual(EMPTY_MAP_STATE)
   })
