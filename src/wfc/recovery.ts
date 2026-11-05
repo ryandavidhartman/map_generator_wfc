@@ -17,11 +17,16 @@
 //   Local-WFC and never used as a Local-WFC center. They can still be dropped, which leaves
 //   their tile unchanged.
 // - Returns the list of tiles written instead of rendering them.
+// - `maskFor` (new) is passed to every solve, including Local-WFC re-solves and unfixed cells.
+// - The drop phase clears unfixed cells before every attempt, not just once (see Phase 3).
+// - `lookahead` (new): also solve the unsolved rings just outside the region, then discard them.
+//   With masks, this keeps the region from leaving an edge its unsolved neighbors can't match
+//   (a cell can't see the masks of cells outside the solve).
 
 import type { Rng } from '../engine/dice'
 import { CUBE_DIRS, cubeCoordsInRadius, cubeDistance, cubeKey, keyOf, parseCubeKey, type Cube } from './cube'
 import { getDefaultRules, type AdjacencyRules, type PlacedTile } from './rules'
-import { HexWFCSolver, type Conflict, type NeighborCell } from './solver'
+import { HexWFCSolver, type Conflict, type MaskFor, type NeighborCell } from './solver'
 
 export type TileStore = Map<string, PlacedTile> // keyed by cubeKey
 
@@ -31,6 +36,8 @@ export type RegionSolveOptions = {
   isLocked?: (key: string) => boolean
   initialCollapses?: PlacedTile[]
   maxLocalAttempts?: number
+  maskFor?: MaskFor
+  lookahead?: number // rings of unsolved cells to solve and discard (default 0)
 }
 
 export type RegionSolveStats = {
@@ -76,7 +83,7 @@ export function solveRegion(store: TileStore, solveCells: Cube[], options: Regio
   const rules = options.rules ?? getDefaultRules()
   const isLocked = options.isLocked ?? (() => false)
   const maxLocalAttempts = options.maxLocalAttempts ?? 5
-  const { rng } = options
+  const { rng, maskFor } = options
   const stats: RegionSolveStats = { tries: 0, backtracks: 0, localWfcAttempts: 0, unfixed: 0, dropped: 0 }
   const updates = new Map<string, PlacedTile>()
   const dropped: Cube[] = []
@@ -99,9 +106,14 @@ export function solveRegion(store: TileStore, solveCells: Cube[], options: Regio
     persistedUnfixedKeys: new Set(),
     initialCollapses: options.initialCollapses ?? [],
   }
+  // The lookahead ring: unsolved cells next to the region. Solved with it, never written.
+  const margin = unsolvedRings(store, solveCells, options.lookahead ?? 0)
+  const marginKeys = new Set(margin.map(keyOf))
   const rebuildFixed = () => {
-    ctx.fixedCells = getFixedCellsForRegion(store, ctx.solveCells)
-    const solveSet = new Set(ctx.solveCells.map(keyOf))
+    // Fixed cells border the region or its lookahead ring.
+    const all = margin.length > 0 ? [...ctx.solveCells, ...margin] : ctx.solveCells
+    ctx.fixedCells = getFixedCellsForRegion(store, all)
+    const solveSet = new Set(all.map(keyOf))
     const fixedSet = new Set(ctx.fixedCells.map(keyOf))
     ctx.anchorMap = new Map(ctx.fixedCells.map((fc) => [keyOf(fc), getAnchorsForCell(store, fc, solveSet, fixedSet)]))
   }
@@ -109,11 +121,11 @@ export function solveRegion(store: TileStore, solveCells: Cube[], options: Regio
 
   const attempt = (): AttemptResult => {
     let activeFixed: PlacedTile[] = ctx.fixedCells.filter((fc) => !fc.dropped)
-    let activeSolve = ctx.solveCells
+    let activeSolve = margin.length > 0 ? [...ctx.solveCells, ...margin] : ctx.solveCells
 
     // Cells unfixed by an earlier failed attempt stay solve cells; their anchors are fixed.
     if (ctx.persistedUnfixedKeys.size > 0) {
-      activeSolve = [...ctx.solveCells]
+      activeSolve = [...ctx.solveCells, ...margin]
       const solveKeys = new Set(activeSolve.map(keyOf))
       const fixedKeys = new Set(activeFixed.map(keyOf))
       const anchorFixed: PlacedTile[] = []
@@ -138,13 +150,14 @@ export function solveRegion(store: TileStore, solveCells: Cube[], options: Regio
       .filter((fc) => !ctx.persistedUnfixedKeys.has(keyOf(fc)) && !isLocked(keyOf(fc)))
       .map((fc) => ({ ...plain(fc), anchors: ctx.anchorMap.get(keyOf(fc)) ?? [] }))
 
-    const solver = new HexWFCSolver(rules, { rng, maxTries: 2 })
+    const solver = new HexWFCSolver(rules, { rng, maxTries: 2, maskFor })
     solver.initNeighborData(neighborCells)
-    const tiles = solver.solve(activeSolve, activeFixed, ctx.initialCollapses)
+    let tiles = solver.solve(activeSolve, activeFixed, ctx.initialCollapses)
     stats.tries += solver.tryCount
     stats.backtracks += solver.backtracks
 
     if (tiles) {
+      if (marginKeys.size > 0) tiles = tiles.filter((t) => !marginKeys.has(keyOf(t)))
       const unfixed = solver.unfixedKeys.length + ctx.persistedUnfixedKeys.size
       return { success: true, tiles, unfixed, conflict: null, isNeighborConflict: false }
     }
@@ -188,7 +201,7 @@ export function solveRegion(store: TileStore, solveCells: Cube[], options: Regio
 
       const localSolve = cubeCoordsInRadius(center, 2).filter((c) => store.has(keyOf(c)) && !isLocked(keyOf(c)))
       if (localSolve.length === 0) continue
-      const localSolver = new HexWFCSolver(rules, { rng, maxTries: 5 })
+      const localSolver = new HexWFCSolver(rules, { rng, maxTries: 5, maskFor })
       const localTiles = localSolver.solve(localSolve, getFixedCellsForRegion(store, localSolve))
       if (!localTiles) continue
       write(localTiles)
@@ -203,9 +216,11 @@ export function solveRegion(store: TileStore, solveCells: Cube[], options: Regio
       }
     }
 
-    // Phase 3: drop fixed cells, nearest the failure first.
-    ctx.persistedUnfixedKeys.clear()
+    // Phase 3: drop fixed cells, nearest the failure first. Unfixed cells aren't carried between
+    // drop attempts: their anchors would come back as fixed cells that can never be dropped, so
+    // the same conflict could survive every drop (hex-map-wfc clears them only once, here).
     while (!result.success) {
+      ctx.persistedUnfixedKeys.clear()
       const candidates = ctx.fixedCells.filter((c) => !c.dropped)
       if (candidates.length === 0) break
       const fc = failedCell
@@ -224,6 +239,27 @@ export function solveRegion(store: TileStore, solveCells: Cube[], options: Regio
     write(result.tiles)
   }
   return { ok: result.success, updates: [...updates.values()], dropped, stats }
+}
+
+// Unsolved cells within `rings` steps of the region (through unsolved cells only).
+function unsolvedRings(store: TileStore, solveCells: Cube[], rings: number): Cube[] {
+  const seen = new Set(solveCells.map(keyOf))
+  const out: Cube[] = []
+  let frontier = solveCells
+  for (let k = 0; k < rings; k++) {
+    const next: Cube[] = []
+    for (const c of frontier) {
+      for (const d of CUBE_DIRS) {
+        const key = cubeKey(c.q + d.dq, c.r + d.dr, c.s + d.ds)
+        if (seen.has(key) || store.has(key)) continue
+        seen.add(key)
+        next.push(parseCubeKey(key))
+      }
+    }
+    out.push(...next)
+    frontier = next
+  }
+  return out
 }
 
 // Solved tiles in the store that touch the region from outside, each listed once.

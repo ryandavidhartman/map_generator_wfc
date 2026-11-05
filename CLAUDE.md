@@ -5,14 +5,17 @@ felixturner/hex-map-wfc) generates the overland map. Clicking into a hex opens t
 site generators forked from `~/dev/source/map_generator`.
 
 **The plan, the decisions and the milestones are in `docs/PLAN.md`, which is committed.**
-Read it first. Status (2026-11-04): **M0 and M1 done.**
+Read it first. Status (2026-11-04): **M0, M1 and M2 done.**
 - M0: map_generator forked in. The save key is renamed to `wfc-hex-crawl:map`, so this
   app's saves stay separate from map_generator's on localhost:5173.
 - M1: the WFC solver is ported to TypeScript in `src/wfc/` (see PLAN.md's M1 entry for what
   changed from hex-map-wfc).
+- M2: the world layer in `src/world/` (fields, zone masks, world solver, terrain derivation).
+  Terrain is now 8 types (Coast, Hills). PLAN.md section 2 has the design and the measured
+  numbers.
 
-M2 (world model: terrain from tiles and noise) is next. The suite takes about 20 s, mostly
-`src/wfc/benchmark.test.ts`.
+M3 (state and 2D map, first playable version) is next. The suite takes about 23 s, mostly the
+WFC and world tests.
 
 `docs/reference/map_generator-CLAUDE.md` is a snapshot of map_generator's CLAUDE.md as of the
 fork: its architecture notes for the site generators, state and tables still apply here. Its
@@ -38,3 +41,10 @@ copied.
   game, publisher or rulebook; don't commit unless asked.
 - Node 20.16 and Vite 6.4 (not 7 or 8). Run `source ~/.nvm/nvm.sh && nvm use` before npm.
   See the "Stack" section of `docs/reference/map_generator-CLAUDE.md`.
+- **Tuning the world:** `npm run sim -- --seeds N --rings R` grows N worlds and prints the
+  terrain mix against the targets. The tuning constants are `WORLD_TUNING` (fields.ts),
+  `BIOME_TUNING` (terrain.ts) and `RIVER_WEIGHT` / `LOOKAHEAD_RINGS` (world/solve.ts). Any
+  tuning change must keep "0 failed, 0 dropped cells". Changing tuning alters how unsolved
+  parts of existing worlds come out, but never solved hexes.
+- `scripts/` is bundled with esbuild and run with node (there's no tsx). It's typechecked by
+  `tsconfig.scripts.json`.

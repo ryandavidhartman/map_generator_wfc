@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMapDispatch } from '../state/MapContext'
-import { TERRAIN_ORDER, type Terrain } from '../data/tables'
+import { ALL_TERRAINS, type Terrain } from '../data/tables'
 import { rollStartingTerrain } from '../engine/generateHex'
 
 export function StartMapDialog() {
@@ -22,7 +22,7 @@ export function StartMapDialog() {
       <label>
         Starting terrain
         <select value={terrain} onChange={(e) => setTerrain(e.target.value as Terrain)}>
-          {TERRAIN_ORDER.map((t) => (
+          {ALL_TERRAINS.map((t) => (
             <option key={t} value={t}>
               {t}
             </option>

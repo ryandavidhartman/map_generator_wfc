@@ -7,6 +7,7 @@ import {
   minPartyLevelForOsrUrbanEncounter,
   type EncounterTableKey,
 } from './encounterTables'
+import { ALL_TERRAINS } from './tables'
 
 const ALL_KEYS: EncounterTableKey[] = [
   'Arctic',
@@ -25,7 +26,7 @@ const ALL_KEYS: EncounterTableKey[] = [
   'Market',
   'Mountain',
   'Ocean',
-  'River and Coast',
+  'Coast',
   'Ruins',
   'Slums',
   'Swamp',
@@ -64,9 +65,14 @@ describe('encounterForD100', () => {
 })
 
 describe('TERRAIN_TO_ENCOUNTER_KEYS', () => {
+  it('maps Hills to the Hills table and Coast to the old River and Coast table', () => {
+    expect(TERRAIN_TO_ENCOUNTER_KEYS.Hills).toEqual(['Hills'])
+    expect(encounterForD100('Hills', 1)).toBe('A barrow mound stands open, its capstone freshly rolled aside')
+    expect(TERRAIN_TO_ENCOUNTER_KEYS.Coast).toEqual(['Coast'])
+  })
+
   it('maps every overland terrain to at least one table', () => {
-    const terrains = ['Desert/arctic', 'Swamp', 'Grassland', 'Forest/jungle', 'River/coast', 'Ocean', 'Mountain'] as const
-    for (const terrain of terrains) {
+    for (const terrain of ALL_TERRAINS) {
       expect(TERRAIN_TO_ENCOUNTER_KEYS[terrain].length).toBeGreaterThan(0)
     }
   })

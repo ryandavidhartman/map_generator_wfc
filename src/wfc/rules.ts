@@ -104,7 +104,13 @@ export class AdjacencyRules {
   readonly typeMask = new Map<number, Uint32Array>()
   readonly full: Uint32Array // every state
 
-  constructor(tileTypes: readonly number[] = TILE_LIST.map((_, i) => i)) {
+  // `weightOf` overrides a tile's collapse weight (default: TILE_LIST's weight). State order and
+  // indexes depend only on tileTypes, so masks built for one rules object fit another with the
+  // same tile types.
+  constructor(
+    tileTypes: readonly number[] = TILE_LIST.map((_, i) => i),
+    weightOf: (type: number) => number = (type) => TILE_LIST[type].weight,
+  ) {
     this.tileTypes = tileTypes
     this.states = allStates(tileTypes)
     this.stateCount = this.states.length
@@ -117,7 +123,7 @@ export class AdjacencyRules {
 
     this.states.forEach((state, n) => {
       this.stateIndex.set(stateKey(state), n)
-      this.weights[n] = TILE_LIST[state.type].weight
+      this.weights[n] = weightOf(state.type)
       this.stateTypes[n] = state.type
       setBit(this.full, n)
       let tm = this.typeMask.get(state.type)
@@ -132,6 +138,15 @@ export class AdjacencyRules {
       })
     })
   }
+}
+
+// A bitset of the states that satisfy `pred` (for HexWFCSolver's maskFor).
+export function maskWhere(rules: AdjacencyRules, pred: (s: TileState, n: number) => boolean): Uint32Array {
+  const mask = new Uint32Array(rules.words)
+  rules.states.forEach((s, n) => {
+    if (pred(s, n)) setBit(mask, n)
+  })
+  return mask
 }
 
 export function setBit(bits: Uint32Array, n: number): void {

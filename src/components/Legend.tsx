@@ -1,4 +1,4 @@
-import { TERRAIN_ORDER } from '../data/tables'
+import { ALL_TERRAINS } from '../data/tables'
 import { DANGER_COLORS, TERRAIN_COLORS } from '../hexgrid/colors'
 
 const DANGER_ORDER = ['Safe', 'Unsafe', 'Risky', 'Deadly'] as const
@@ -9,7 +9,7 @@ export function Legend() {
       <div className="legend-group">
         <h3>Terrain</h3>
         <ul>
-          {TERRAIN_ORDER.map((terrain) => (
+          {ALL_TERRAINS.map((terrain) => (
             <li key={terrain}>
               <span className="swatch" style={{ background: TERRAIN_COLORS[terrain] }} />
               {terrain}

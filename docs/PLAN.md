@@ -45,42 +45,88 @@ Written 2026-11-04. All numbers are starting points to tune by simulation.
 
 ### 1. World generation (WFC)
 
-- Campaign start: the GM picks a seed (or Random) and a starting terrain. WFC solves the first
-  chunk around the origin, with the start hex pinned to a tile that fits the chosen terrain.
-- Tiles come from hex-map-wfc's 30 active tile types × 6 rotations × 5 levels, with its
-  weights and edge rules. Roads come free.
-- The solve runs in a Web Worker (`wfc.worker`), with hex-map-wfc's backtracking and recovery
-  (unfixing, then Local-WFC, then the mountain fallback).
+- Campaign start: the GM picks a seed (or Random) and a starting terrain. `placeWorld` puts
+  the start hex inland or at sea to match (section 4), and WFC solves the first chunk around
+  it. A specific land terrain (e.g. Forest) still needs a matching start hex; that's M3's job
+  (search near the origin for a hex whose derived terrain matches, and shift the world to it).
+- Tiles come from hex-map-wfc's 34 active tile types × 6 rotations × up to 5 levels (about
+  900 states), with its edge rules and weights (river tiles ×1.6, section 2). Roads come free.
+- The solve runs in a Web Worker (`src/world/solver.worker.ts`), with hex-map-wfc's
+  backtracking and recovery (unfixing, then Local-WFC, then dropping cells), steered by the
+  world's masks (section 2).
 - **Change from hex-map-wfc:** recovery may only unfix or re-solve *unrevealed* hexes. A
   revealed hex is always a fixed constraint. If a chunk can't be solved without touching a
   revealed hex, the mountain fallback is used at the boundary instead.
 
-### 2. Terrain from tile and noise
+### 2. Terrain from tile and noise (built in M2)
 
-Each hex's `Terrain` is worked out from its tile plus two seeded noise fields, moisture and
-temperature. Elevation comes from the tile's level, not noise.
+The world fields (`src/world/fields.ts`) are seeded noise sampled at each hex: **continent**
+(sea or land), **elevation** (a target tile level, rising inland, with ridges for ranges),
+**moisture** and **temperature**. They do two jobs.
+
+**They steer WFC** through per-cell masks of allowed tiles (`src/world/masks.ts`). Each cell
+gets a zone from the continent value at it and its six neighbors:
+
+| Zone | Where | Allowed |
+|---|---|---|
+| sea | cell and all neighbors are sea | open water only (level 0) |
+| wetShore | sea cell with 2+ sea neighbors, next to land | anything at base level 0-1 |
+| dryShore | land next to sea (or a speck of sea) | land at base level 0-1, coast tiles included |
+| land | cell and all neighbors are land | no open water; tile levels overlapping elevation ±1 |
+
+Zoning by neighbors guarantees free shore cells wherever sea meets land, so thin features in
+the noise can always be resolved. Without that, a one-hex isthmus needs a tile with two separate
+water edges, which doesn't exist. Elevation steering is what makes hills and mountains form
+ranges instead of random patches.
+
+**They label the result** (`src/world/terrain.ts`, `deriveHexGeo`). Terrain is a pure function
+of the tile and the fields at its hex, so it's worked out when needed, not saved:
 
 | Tile | Terrain |
 |---|---|
 | `WATER` | Ocean |
-| `COAST_*`, `RIVER_INTO_COAST` | Coast |
-| Land at level 3, or a slope up to 3 | Hills |
-| Land at level 4, or a cliff with a level-4 top | Mountain |
-| Other land, level 0-2 | Biome noise: high moisture near water → Swamp; high moisture → Forest/jungle; low moisture, or a temperature extreme → Desert/arctic; otherwise Grassland |
+| any tile with a water edge (coasts, river mouth) | Coast |
+| highest edge level 4, or a steep tile (rising 2 levels) topping out at 3 | Mountain |
+| highest edge level 3, or a steep tile topping out at 2 | Hills |
+| other land | wet at level 0 → Swamp; very dry, or very hot or cold → Desert/arctic; moist → Forest/jungle; else Grassland |
 
-- Noise thresholds are tuned to hit roughly the base frequencies in map_generator's punch-list
-  item 1a: Grassland ~28%, Forest ~25%, Coast ~17%, Hills ~12%, Swamp ~7%, Desert/arctic ~2%,
-  Mountain ~2%, measured over land.
-- Terrain changes, carried over from map_generator's 1a plan: **River/coast is renamed Coast**
-  and **Hills is added**. Hills content already exists in map_generator but isn't wired up:
-  `HILLS_ENCOUNTER_CHANCE`, `HILLS_CATEGORY_TABLE`, `HILLS` (wilderness levels and the d100
-  encounters), `HILLS_CATACLYSMS`, `HILLS_NATURAL_LANDMARK` and `HILLS_COLOR`.
-- **Rivers are a feature, not a terrain.** A hex records which of its edges have river and road
-  edges, read straight from its tile and rotation. This gives the town map the real river
-  edges it needs (map_generator's punch-list items 1b and 1c).
-- **Lakes:** hex-map-wfc has no lake tile. v1 marks lakes from noise on about 5% of land hexes
-  with a river end or a low basin, and draws them as features, as 1a planned. A real lake tile
-  is a possible later addition.
+- **Steepness stands in for height.** Steering WFC higher to get more level-3+ land brought back
+  failed solves, slowed solving and cut rivers (they can't cross high ground). Counting steep
+  tiles one class higher hits the targets without that cost.
+- **River tiles are weighted ×1.6** over hex-map-wfc's weights, in the world's own rules
+  (`getWorldRules`). Tile ids are unchanged, so saves aren't affected.
+- **River loops are broken** after every chunk solve (`src/world/rivers.ts`). WFC happily closes
+  rivers into rings (about 7 per 4,100-hex world). A small patch on each ring is re-solved with
+  river tiles banned in one cell. Measured result: 0.1 loops per world.
+- **Rivers and roads are features, not terrain.** `deriveHexGeo` also gives each hex's river,
+  road and sea edges, read from its tile and rotation. This is the real edge data the town map
+  needs (map_generator punch-list items 1b and 1c).
+- **Lakes** are a feature: half of inland river ends, and 9.5% of hexes with only grass edges,
+  picked by a hash of the seed and hex (stable, no noise needed). hex-map-wfc has no lake tile.
+- **Terrain changes done:** River/coast is renamed Coast, and Hills is added, with all its
+  existing content wired into the seven terrain-keyed tables. `ALL_TERRAINS` (8 terrains) drives
+  the pickers and legend; `TERRAIN_ORDER` (7) stays for the old 2d6 reveal rules until M3.
+
+**Measured** with `npm run sim -- --seeds 40` (40 worlds of 19 chunks, about 4,100 hexes each;
+0 failed solves, 0 dropped cells, about 73 ms per chunk):
+
+| | Mean [min-max] | Target (punch-list 1a) |
+|---|---|---|
+| Coast | 15.8% [7.4-29.3] | 18.0% (set by WFC's coastline, not directly tunable) |
+| Swamp | 7.6% [3.6-13.8] | 8.0% |
+| Grassland | 29.4% [16.2-43.2] | 30.5% |
+| Forest/jungle | 28.9% [18.1-40.1] | 27.0% |
+| Desert/arctic | 2.5% [0-14.2] | 2.1% |
+| Hills | 12.0% [4.6-24.8] | 12.5% |
+| Mountain | 3.8% [0.7-10.7] | 2.1% |
+| biggest landmass / land | 96.0% [78.7-100] | ≥ 95% (some worlds have a large second island) |
+| rivers / land | 15.5% [9.1-25.3] | ~17% |
+| lakes / land | 5.2% [4.0-6.1] | ~5% |
+| one-hex ponds / inland water bodies | 1.3% | ≤ 5% |
+| roads / land | 23.8% | (none; see open question 3) |
+
+Terrain shares are of land (everything but Ocean); open water is about 32% of the map. The
+spread between worlds is wide by design: some are wetter, colder or more mountainous.
 
 ### 3. Exploration and fog of war
 
@@ -104,9 +150,16 @@ temperature. Elevation comes from the tile's level, not noise.
   so the revealed-is-fixed rule rarely restricts recovery. (M1 measured why this matters:
   with every earlier tile locked, 16% of chunk solves needed drops. With nothing locked,
   none did.) Existing hexes along the shared edge are the new chunk's fixed constraints.
-- Large-scale shape: hex-map-wfc seeds ocean at the map corners. We replace that with a seeded
-  continent noise field that seeds ocean tiles where the field says "sea", so coasts and oceans
-  form continent-scale bodies across chunks. This replaces map_generator 1a's "world formula".
+- Large-scale shape comes from the continent field, through the masks (section 2), not from
+  seed tiles. hex-map-wfc's corner ocean seeds and first-chunk seeds aren't used by the world
+  solver. This replaces map_generator 1a's "world formula".
+- `placeWorld(seed, wantSea)` shifts the noise so every hex within 3 of the start hex is on the
+  chosen side of sea level. Checking only the start hex itself left starts on the coast.
+- **Lookahead:** each chunk solve also solves the 2 unsolved rings around it, and then throws
+  them away. Masks only apply to cells being solved, so without this a chunk could leave an edge
+  its unsolved neighbors' masks can't match. Measured: 1 ring left 4 dropped cells over 760
+  chunk solves, and 2 rings left none (65 vs 80 ms per chunk). The worker's context radius is
+  R + 6.
 
 ### 5. Points of interest
 
@@ -154,15 +207,19 @@ src/
     solver.ts         HexWFCSolver: propagation, backtracking, unfixing
     recovery.ts       solveRegion: Local-WFC and drop recovery, with isLocked
     chunks.ts         chunk lattice, solveChunk, first-chunk seeds
-    protocol.ts       worker request/response, handleSolveChunkRequest
+    rng.ts            Mulberry32, per-chunk seeds
+  world/       ← the bridge between tiles and game hexes (built in M2)
+    noise.ts          seeded simplex noise, fBm
+    fields.ts         continent / elevation / moisture / temperature, placeWorld
+    masks.ts          zones and per-cell allowed tiles
+    solve.ts          solveWorldChunk (masks, lookahead, river loops), world rules
+    rivers.ts         river-loop detection and breaking
+    terrain.ts        tile + fields → Terrain, river/road/sea edges, lakes (deriveHexGeo)
+    stats.ts          measureWorld, growWorld (for tests and `npm run sim`)
+    protocol.ts       worker request/response (moved from wfc/ in M2)
     solver.worker.ts  the Web Worker (just calls protocol.ts)
     client.ts         WfcClient: promise wrapper around the worker
-    rng.ts            Mulberry32, per-chunk seeds
-  world/       ← new: the bridge between tiles and game hexes
-    world.ts          growth trigger, revealed-is-fixed rule (lattice is in wfc/chunks.ts)
-    terrain.ts        tile + noise → Terrain, river/road edges, lakes
-    anchors.ts        settlement anchors
-    noise.ts          continent / moisture / temperature fields
+    (M5) growth trigger; (M6) anchors.ts, settlement anchors
   render2d/    ← map_generator's HexGridSvg, reworked for tiles and pointy-top
   render3d/    ← ported from hex-map-wfc: HexTiles, Decorations, Water, Lighting, PostFX
     ThreeMapView.tsx  React wrapper (owns the canvas and renderer lifecycle)
@@ -217,10 +274,21 @@ Recovery stats over 350 solves (50 seeds × 7 chunks): unfixing in 15% of solves
 5 times, 0 drops. With every earlier tile locked: 68 drops in 55 solves (16%). See section 4
 for how M5 avoids that.
 
-**M2 — World model.** `world/`: chunk lattice, continent noise for ocean seeds, terrain from
-tile and noise, river and road edges, lakes. The `Terrain` changes (Coast rename, Hills, wiring
-up the Hills content). Simulation script reporting the terrain mix, ocean body sizes and the
-share of land with rivers, tuned to the targets in section 2.
+**M2 — World model. ✅ Done 2026-11-04.** `src/world/`: noise fields, zone masks that steer
+WFC, the world chunk solver (lookahead, river-loop breaking), and `deriveHexGeo` (terrain,
+river/road/sea edges, lakes). The Terrain changes (Coast rename, Hills wired in). `npm run sim`
+reports the terrain mix and the 1a targets (section 2 has the numbers). 36 new tests (1,077 in
+all). A production build was checked in headless Chromium: the module worker built the masks
+and solved 3 chunks (651 tiles, no mismatches or drops). Changes to M1's `wfc/` code:
+- The solver takes `maskFor` (allowed states per cell), and `solveRegion` and `solveChunk` take
+  `lookahead` (rings) and `rules`. `AdjacencyRules` takes optional weight overrides.
+- **Bug fix, inherited from hex-map-wfc:** in the drop phase, failed attempts kept their
+  unfixed cells. The next attempt re-added those cells' anchors as fixed constraints that can
+  never be dropped, so a conflict could survive every drop. In one world, all 28 boundary
+  cells were dropped and the chunk still failed. Now unfixed cells are cleared before every
+  drop attempt.
+- The worker protocol moved to `world/`, because the worker now needs the world fields. A
+  request carries `WorldParams` instead of a bare seed.
 
 **M3 — State and 2D map.** `MapState` gains the world fields. `START_MAP` solves chunk 0, and
 `MOVE_PARTY_TO` reveals and rolls as today. Rework `HexGridSvg` for pointy-top: terrain fill,
@@ -291,5 +359,7 @@ no revealed hex ever changing, and count drops (target: none in normal play).
 2. Is a hex 6 miles across, as in map_generator? A 217-hex chunk is then about 100 miles
    across. (M2)
 3. Should roads be game data (faster travel, more encounters along roads) or just look? (M3)
+   Note: WFC puts roads on about 24% of land hexes, which is a lot for 6-mile wilderness hexes.
+   Lowering road tile weights in the world rules is easy if that reads wrong.
 4. Fog look in 3D: hide unrevealed tiles, or show clouds/parchment? (M4; needs a reference
    image, per map_generator's rule for visual changes)

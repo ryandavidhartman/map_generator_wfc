@@ -2,22 +2,38 @@
 // structure from the core rules; terrain and danger names are plain generic labels), plus the
 // Settlement Name table (original names).
 
+// Coast was "Coast" until M2 (rivers are now a hex feature, not a terrain); Hills was
+// added in M2. See docs/PLAN.md.
 export type Terrain =
   | 'Desert/arctic'
   | 'Swamp'
   | 'Grassland'
   | 'Forest/jungle'
-  | 'River/coast'
+  | 'Coast'
   | 'Ocean'
+  | 'Hills'
   | 'Mountain'
 
-// Circular loop order used for New Hex terrain stepping.
+// Every terrain, low to high, for pickers and the legend.
+export const ALL_TERRAINS: Terrain[] = [
+  'Ocean',
+  'Coast',
+  'Swamp',
+  'Grassland',
+  'Forest/jungle',
+  'Desert/arctic',
+  'Hills',
+  'Mountain',
+]
+
+// Circular loop order used for New Hex terrain stepping (the original 2d6 reveal rules, used
+// until the WFC map replaces them in M3). Hills isn't part of these rules.
 export const TERRAIN_ORDER: Terrain[] = [
   'Desert/arctic',
   'Swamp',
   'Grassland',
   'Forest/jungle',
-  'River/coast',
+  'Coast',
   'Ocean',
   'Mountain',
 ]
@@ -35,7 +51,7 @@ export function terrainFor2d6(roll: number): Terrain {
   if (roll === 3) return 'Swamp'
   if (roll >= 4 && roll <= 6) return 'Grassland'
   if (roll >= 7 && roll <= 8) return 'Forest/jungle'
-  if (roll >= 9 && roll <= 10) return 'River/coast'
+  if (roll >= 9 && roll <= 10) return 'Coast'
   if (roll === 11) return 'Ocean'
   if (roll === 12) return 'Mountain'
   throw new Error(`terrainFor2d6: roll out of range: ${roll}`)

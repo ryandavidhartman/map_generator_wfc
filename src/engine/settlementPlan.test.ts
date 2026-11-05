@@ -274,7 +274,7 @@ describe('waterForHex', () => {
   const ne = -Math.PI / 6
   it('puts a coast toward Ocean neighbors, whatever the hex itself is', () => {
     expect(waterForHex('Grassland', [{ terrain: 'Ocean', angle: ne }])).toEqual({ kind: 'coast', angle: expect.closeTo(ne, 9) })
-    expect(waterForHex('River/coast', [{ terrain: 'Ocean', angle: ne }, { terrain: 'Forest/jungle', angle: 2 }])?.kind).toBe('coast')
+    expect(waterForHex('Coast', [{ terrain: 'Ocean', angle: ne }, { terrain: 'Forest/jungle', angle: 2 }])?.kind).toBe('coast')
     const twoSeas = waterForHex('Ocean', [{ terrain: 'Ocean', angle: 0 }, { terrain: 'Ocean', angle: Math.PI / 2 }])
     expect(twoSeas?.angle).toBeCloseTo(Math.PI / 4, 9)
   })
@@ -283,14 +283,14 @@ describe('waterForHex', () => {
     expect(waterForHex('Ocean', [])).toEqual({ kind: 'coast' })
   })
 
-  it('runs a river through a River/coast hex, toward a River/coast neighbor when there is one', () => {
-    expect(waterForHex('River/coast', [{ terrain: 'River/coast', angle: 1 }])).toEqual({ kind: 'river', angle: 1 })
-    expect(waterForHex('River/coast', [{ terrain: 'Mountain', angle: 1 }])).toEqual({ kind: 'river' })
+  it('runs a river through a Coast hex, toward a Coast neighbor when there is one', () => {
+    expect(waterForHex('Coast', [{ terrain: 'Coast', angle: 1 }])).toEqual({ kind: 'river', angle: 1 })
+    expect(waterForHex('Coast', [{ terrain: 'Mountain', angle: 1 }])).toEqual({ kind: 'river' })
   })
 
   it('gives dry hexes with no Ocean neighbor no water', () => {
     for (const terrain of ['Grassland', 'Forest/jungle', 'Mountain', 'Desert/arctic', 'Swamp'] as const) {
-      expect(waterForHex(terrain, [{ terrain: 'River/coast', angle: 0 }, { terrain: 'Grassland', angle: 1 }])).toBeNull()
+      expect(waterForHex(terrain, [{ terrain: 'Coast', angle: 0 }, { terrain: 'Grassland', angle: 1 }])).toBeNull()
     }
   })
 })

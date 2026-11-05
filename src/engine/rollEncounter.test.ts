@@ -43,7 +43,7 @@ describe('checkWildernessEncounterFrequency', () => {
 })
 
 describe('rollWildernessMonster', () => {
-  const TERRAINS: Terrain[] = ['Grassland', 'Forest/jungle', 'River/coast', 'Ocean', 'Mountain', 'Desert/arctic', 'Swamp']
+  const TERRAINS: Terrain[] = ['Grassland', 'Forest/jungle', 'Coast', 'Ocean', 'Mountain', 'Desert/arctic', 'Swamp']
 
   function seededRng(seed: number): () => number {
     let state = seed >>> 0

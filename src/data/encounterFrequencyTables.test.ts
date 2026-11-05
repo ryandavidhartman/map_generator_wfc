@@ -1,8 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import { wildernessEncounterChanceForTerrain, encounterPurposeForD8, wildernessCategoryForD100 } from './encounterFrequencyTables'
-import type { Terrain } from './tables'
+import { ALL_TERRAINS } from './tables'
 
-const ALL_TERRAINS: Terrain[] = ['Desert/arctic', 'Swamp', 'Grassland', 'Forest/jungle', 'River/coast', 'Ocean', 'Mountain']
+describe('Hills (wired in M2)', () => {
+  it('uses the book\'s Hills rows for encounter chance and category', () => {
+    expect(wildernessEncounterChanceForTerrain('Hills')).toEqual([5, 6])
+    expect(wildernessCategoryForD100('Hills', 1)).toBe('Airborne')
+    expect(wildernessCategoryForD100('Hills', 50)).toBe('Human/Demi-Human')
+    expect(wildernessCategoryForD100('Hills', 100)).toBe('Special')
+  })
+})
 
 describe('wildernessEncounterChanceForTerrain', () => {
   it('every terrain has a non-empty chance set, all values within 1-6', () => {

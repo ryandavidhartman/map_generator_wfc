@@ -166,8 +166,8 @@ const FIELD_COLORS = ['#9bb36a', '#b5c27a', '#c9bf7f', '#86a35e', '#a8b872']
 // --- water from the hex ------------------------------------------------------------------
 
 // User rule (2026-10-31): water must make sense for the hex the settlement is in. A coast faces
-// the Ocean neighbors; a River/coast hex with no Ocean neighbor gets a river flowing toward a
-// watery neighbor; a hex with no water and no Ocean neighbor gets none. `neighbors` are the
+// the Ocean neighbors; a Coast hex with no Ocean neighbor gets a river flowing toward a
+// watery neighbor (M6 replaces this with the hex's real coast and river edges); a hex with no water and no Ocean neighbor gets none. `neighbors` are the
 // revealed neighboring hexes with their direction from this hex on the overland map.
 export function waterForHex(terrain: Terrain, neighbors: { terrain: Terrain; angle: number }[]): SettlementWaterInput | null {
   const meanAngle = (angles: number[]) =>
@@ -178,8 +178,8 @@ export function waterForHex(terrain: Terrain, neighbors: { terrain: Terrain; ang
   const ocean = neighbors.filter((n) => n.terrain === 'Ocean').map((n) => n.angle)
   if (ocean.length > 0) return { kind: 'coast', angle: meanAngle(ocean) }
   if (terrain === 'Ocean') return { kind: 'coast' }
-  if (terrain === 'River/coast') {
-    const river = neighbors.filter((n) => n.terrain === 'River/coast').map((n) => n.angle)
+  if (terrain === 'Coast') {
+    const river = neighbors.filter((n) => n.terrain === 'Coast').map((n) => n.angle)
     return river.length > 0 ? { kind: 'river', angle: river[0] } : { kind: 'river' }
   }
   return null
@@ -189,7 +189,7 @@ export function waterForHex(terrain: Terrain, neighbors: { terrain: Terrain; ang
 // with its direction from this hex (radians, y down — the same frame as the settlement plan, so a
 // neighbor to the screen's north-east puts the sea on the town map's north-east). Unrevealed
 // neighbors don't count. Neighbors are visited in neighborsOf order, which decides which
-// River/coast neighbor a river heads toward when there are several.
+// Coast neighbor a river heads toward when there are several.
 export function waterForMapHex(hex: AxialCoord & { terrain: Terrain }, hexes: Record<string, { terrain: Terrain }>): SettlementWaterInput | null {
   const center = axialToPixel(hex, 1)
   const neighbors = neighborsOf(hex).flatMap((coord) => {

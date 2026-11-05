@@ -25,6 +25,7 @@ Other commands:
 npm run test       # run the Vitest suite
 npm run build      # typecheck and build for production
 npx tsc -b         # typecheck only
+npm run sim -- --seeds 10   # generate worlds and report terrain statistics (for tuning)
 ```
 
 ## License

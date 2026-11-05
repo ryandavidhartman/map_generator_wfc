@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { wildernessMonsterNameForRoll, wildernessEncounterLevelDie } from './wildernessMonsterLevelTables'
-import type { Terrain } from './tables'
+import { ALL_TERRAINS as TERRAINS } from './tables'
 
-const TERRAINS: Terrain[] = ['Grassland', 'Forest/jungle', 'River/coast', 'Ocean', 'Mountain', 'Desert/arctic', 'Swamp']
+describe('Hills (wired in M2)', () => {
+  it('rolls on the Hills tables', () => {
+    expect(wildernessMonsterNameForRoll('Hills', 'Giant', 5)).toBe('Giant, Hill')
+  })
+})
 
 describe('wildernessEncounterLevelDie', () => {
   it('matches the book\'s three tiers', () => {

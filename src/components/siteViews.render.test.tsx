@@ -12,7 +12,7 @@ import { HexSiteContent } from './hexdetail/HexSiteContent'
 import { HexGridSvg } from '../hexgrid/HexGridSvg'
 import { MapProvider } from '../state/MapContext'
 import { EMPTY_MAP_STATE, mapReducer, type Hex, type MapState } from '../state/mapReducer'
-import { TERRAIN_ORDER, type Terrain } from '../data/tables'
+import { ALL_TERRAINS, type Terrain } from '../data/tables'
 import { pointOfInterestForFeatureRoll } from '../engine/generateHex'
 import { generateSiteForHex } from '../engine/generateSite'
 import { computeVisibleCoords } from '../hexgrid/hexMath'
@@ -81,7 +81,7 @@ afterEach(() => {
 describe('site views render every Feature-table row', () => {
   // Two seeds per row, with terrain and danger level varied across rows.
   const cases = Array.from({ length: 200 }, (_, i) => i + 1).flatMap((roll) =>
-    [1, 2].map((s) => ({ roll, seed: roll * 101 + s, terrain: TERRAIN_ORDER[(roll + s) % TERRAIN_ORDER.length], dangerLevel: 1 + ((roll * s) % 10) })),
+    [1, 2].map((s) => ({ roll, seed: roll * 101 + s, terrain: ALL_TERRAINS[(roll + s) % ALL_TERRAINS.length], dangerLevel: 1 + ((roll * s) % 10) })),
   )
 
   it.each(cases)('row $roll (seed $seed, $terrain, DL $dangerLevel)', ({ roll, seed, terrain, dangerLevel }) => {

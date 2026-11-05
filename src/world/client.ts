@@ -1,10 +1,10 @@
 // Main-thread side of the WFC worker: send a chunk to solve, get a promise of the result.
 // Requests are answered in order (the worker handles one message at a time).
 
-import { tilesNearChunk, type ChunkCoord } from './chunks'
-import { keyOf } from './cube'
-import type { TileStore } from './recovery'
-import type { PlacedTile } from './rules'
+import { tilesNearChunk, type ChunkCoord } from '../wfc/chunks'
+import { keyOf } from '../wfc/cube'
+import type { TileStore } from '../wfc/recovery'
+import type { WorldParams } from './fields'
 import type { SolveChunkRequest, SolveChunkResponse } from './protocol'
 
 // The subset of Worker the client uses, so tests can pass a fake.
@@ -41,7 +41,7 @@ export class WfcClient {
   solveChunk(
     store: TileStore,
     chunk: ChunkCoord,
-    options: { worldSeed: number; lockedKeys?: Iterable<string>; initialCollapses?: PlacedTile[] },
+    options: { world: WorldParams; lockedKeys?: Iterable<string> },
   ): Promise<SolveChunkResponse> {
     const id = this.nextId++
     const tiles = tilesNearChunk(store, chunk)
@@ -49,14 +49,7 @@ export class WfcClient {
     const lockedKeys = [...(options.lockedKeys ?? [])].filter((k) => near.has(k))
     return new Promise((resolve) => {
       this.pending.set(id, resolve)
-      this.worker.postMessage({
-        id,
-        worldSeed: options.worldSeed,
-        chunk,
-        tiles,
-        lockedKeys,
-        initialCollapses: options.initialCollapses,
-      })
+      this.worker.postMessage({ id, world: options.world, chunk, tiles, lockedKeys })
     })
   }
 

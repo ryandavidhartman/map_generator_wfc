@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { TERRAIN_ORDER } from './tables'
+import { ALL_TERRAINS } from './tables'
 import { locationFeatureForD200, cataclysmForTerrain, naturalLandmarkForTerrain } from './locationTables'
 
 describe('Location Generator Feature table (d200)', () => {
@@ -69,7 +69,7 @@ describe('Location Generator Feature table (d200)', () => {
 
 describe('Cataclysm table (d8, terrain-keyed)', () => {
   it('has exactly 8 entries per terrain, all populated', () => {
-    for (const terrain of TERRAIN_ORDER) {
+    for (const terrain of ALL_TERRAINS) {
       for (let roll = 1; roll <= 8; roll++) {
         expect(cataclysmForTerrain(terrain, roll)).toBeTruthy()
       }
@@ -82,6 +82,7 @@ describe('Cataclysm table (d8, terrain-keyed)', () => {
   })
 
   it('spot-checks a couple of entries', () => {
+    expect(cataclysmForTerrain('Hills', 1)).toBe('Landslide buried a hillside village')
     expect(cataclysmForTerrain('Mountain', 1)).toBe('Eruption reshaped peaks, buried valleys')
     expect(cataclysmForTerrain('Ocean', 8)).toBe('Ritual summoned a kraken/maelstrom, drowned a civilization')
   })
@@ -89,12 +90,13 @@ describe('Cataclysm table (d8, terrain-keyed)', () => {
 
 describe('Natural Landmark table (terrain-keyed, no roll)', () => {
   it('has exactly one entry per terrain', () => {
-    for (const terrain of TERRAIN_ORDER) {
+    for (const terrain of ALL_TERRAINS) {
       expect(naturalLandmarkForTerrain(terrain)).toBeTruthy()
     }
   })
 
   it('spot-checks an entry', () => {
+    expect(naturalLandmarkForTerrain('Hills')).toMatch(/^A great barrow-shaped hill/)
     expect(naturalLandmarkForTerrain('Swamp')).toBe(
       'Massive, hollowed-out cypress tree wide enough to serve as shelter, rising from the mire',
     )

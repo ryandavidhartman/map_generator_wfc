@@ -25,12 +25,13 @@ export type EncounterTableKey =
   | 'Forest'
   | 'Grassland'
   | 'High District'
+  | 'Hills'
   | 'Jungle'
   | 'Low District'
   | 'Market'
   | 'Mountain'
   | 'Ocean'
-  | 'River and Coast'
+  | 'Coast'
   | 'Ruins'
   | 'Slums'
   | 'Swamp'
@@ -737,9 +738,8 @@ const MOUNTAIN: RangeEntry[] = [
   { min: 100, max: 100, text: "A peak splits open, revealing a sleeping titan's eye" },
 ]
 
-// Hills (added 2026-11-02 for punch-list item 1a, which adds a Hills terrain). Original text,
-// approved by the user 2026-11-02. Exported but not yet used: it becomes the 'Hills' encounter
-// table key when the Hills terrain is added to the Terrain type.
+// Hills (added 2026-11-02 for punch-list item 1a; the 'Hills' table key since M2). Original
+// text, approved by the user 2026-11-02.
 export const HILLS: RangeEntry[] = [
   { min: 1, max: 1, text: 'A barrow mound stands open, its capstone freshly rolled aside' },
   { min: 2, max: 3, text: '2d6 shepherds drive a flock over the ridge, wary of strangers' },
@@ -1322,12 +1322,13 @@ const TABLES: Record<EncounterTableKey, string[]> = {
   Forest: expandD100(FOREST),
   Grassland: expandD100(GRASSLAND),
   'High District': expandD100(HIGH_DISTRICT),
+  Hills: expandD100(HILLS),
   Jungle: expandD100(JUNGLE),
   'Low District': expandD100(LOW_DISTRICT),
   Market: expandD100(MARKET),
   Mountain: expandD100(MOUNTAIN),
   Ocean: expandD100(OCEAN),
-  'River and Coast': expandD100(RIVER_AND_COAST),
+  Coast: expandD100(RIVER_AND_COAST),
   Ruins: expandD100(RUINS),
   Slums: expandD100(SLUMS),
   Swamp: expandD100(SWAMP),
@@ -1369,8 +1370,9 @@ export const TERRAIN_TO_ENCOUNTER_KEYS: Record<Terrain, EncounterTableKey[]> = {
   Swamp: ['Swamp'],
   Grassland: ['Grassland'],
   'Forest/jungle': ['Forest', 'Jungle'],
-  'River/coast': ['River and Coast'],
+  Coast: ['Coast'],
   Ocean: ['Ocean'],
+  Hills: ['Hills'],
   Mountain: ['Mountain'],
 }
 

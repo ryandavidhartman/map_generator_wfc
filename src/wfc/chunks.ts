@@ -19,6 +19,8 @@ import type { PlacedTile } from './rules'
 import { mixSeed, mulberry32 } from './rng'
 import { TILE_TYPE } from './tiles'
 import type { Rng } from '../engine/dice'
+import type { MaskFor } from './solver'
+import type { AdjacencyRules } from './rules'
 
 export const CHUNK_RADIUS = 8
 
@@ -76,9 +78,11 @@ export function chunkNeighbors({ i, j }: ChunkCoord): ChunkCoord[] {
   ]
 }
 
-// How far from a chunk's center the solve can read tiles: the fixed ring (R+1), anchors
-// (R+2), Local-WFC patches around fixed cells (R+3) and those patches' own fixed ring (R+4).
-export const CHUNK_CONTEXT_RADIUS = R + 4
+// How far from a chunk's center the solve can read tiles, with up to MAX_LOOKAHEAD rings of
+// lookahead (R+1 .. R+L): fixed cells (up to R+L+1), their anchors (R+L+2), Local-WFC patches
+// around fixed cells (R+L+3) and those patches' own fixed ring (R+L+4).
+export const MAX_LOOKAHEAD = 2
+export const CHUNK_CONTEXT_RADIUS = R + MAX_LOOKAHEAD + 4
 
 export type ChunkSolveOptions = {
   worldSeed: number
@@ -86,6 +90,11 @@ export type ChunkSolveOptions = {
   // Tiles to place before solving (only those inside the chunk are used). When omitted and
   // the chunk has no solved neighbors, the first-chunk seeds are used.
   initialCollapses?: PlacedTile[]
+  // Allowed states per cell (see HexWFCSolver).
+  maskFor?: MaskFor
+  // Rings of unsolved cells around the chunk to solve and discard (see solveRegion).
+  lookahead?: number
+  rules?: AdjacencyRules
 }
 
 // Each chunk gets its own Rng, from the world seed and the chunk coordinates.
@@ -99,13 +108,23 @@ export function solveChunk(store: TileStore, chunk: ChunkCoord, options: ChunkSo
   if (cells.some((c) => store.has(keyOf(c)))) {
     throw new Error(`solveChunk: chunk ${chunkKey(chunk)} is already solved`)
   }
+  if ((options.lookahead ?? 0) > MAX_LOOKAHEAD) {
+    throw new Error(`solveChunk: lookahead ${options.lookahead} is over MAX_LOOKAHEAD (${MAX_LOOKAHEAD})`)
+  }
   const rng = chunkRng(options.worldSeed, chunk)
   const cellKeys = new Set(cells.map(keyOf))
   let initialCollapses = (options.initialCollapses ?? []).filter((t) => cellKeys.has(keyOf(t)))
   if (options.initialCollapses === undefined && getFixedCellsForRegion(store, cells).length === 0) {
     initialCollapses = firstChunkSeeds(chunkCenter(chunk), rng)
   }
-  return solveRegion(store, cells, { rng, isLocked: options.isLocked, initialCollapses })
+  return solveRegion(store, cells, {
+    rng,
+    isLocked: options.isLocked,
+    initialCollapses,
+    maskFor: options.maskFor,
+    lookahead: options.lookahead,
+    rules: options.rules,
+  })
 }
 
 // Grass at the center, and one water tile at the midpoint of a random edge of the chunk.

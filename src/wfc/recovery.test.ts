@@ -3,7 +3,7 @@ import { chunkCells, chunkNeighbors, solveChunk } from './chunks'
 import { CUBE_DIRS, keyOf } from './cube'
 import { getAnchorsForCell, getFixedCellsForRegion, solveRegion, type TileStore } from './recovery'
 import { mulberry32 } from './rng'
-import { findMismatches, type PlacedTile } from './rules'
+import { findMismatches, getDefaultRules, type PlacedTile } from './rules'
 import { HEX_DIRS, HEX_OPPOSITE, TILE_TYPE } from './tiles'
 
 const ORIGIN = { q: 0, r: 0, s: 0 }
@@ -76,5 +76,34 @@ describe('locked growth', () => {
       }
       for (const [k, t] of locked) expect(store.get(k)).toEqual(t)
     }
+  }, 60_000) // about 2 s alone; slower when files run in parallel
+})
+
+describe('maskFor', () => {
+  it('restricts cells to their allowed states, and keeps edges matching', async () => {
+    const { maskWhere, getDefaultRules } = await import('./rules')
+    const { TILE_LIST } = await import('./tiles')
+    const rules = getDefaultRules()
+    const noWater = maskWhere(rules, (s) => TILE_LIST[s.type].name !== 'WATER')
+    const onlyWater = maskWhere(rules, (s) => TILE_LIST[s.type].name === 'WATER' && s.level === 0)
+    // West half (q < 0) is sea, the rest may not be open water.
+    const maskFor = (key: string) => (Number(key.split(',')[0]) < 0 ? onlyWater : noWater)
+    const store: TileStore = new Map()
+    const result = solveChunk(store, { i: 0, j: 0 }, { worldSeed: 3, initialCollapses: [], maskFor })
+    expect(result.ok).toBe(true)
+    expect(result.dropped).toEqual([])
+    for (const t of store.values()) {
+      const water = TILE_LIST[t.type].name === 'WATER'
+      expect(water).toBe(t.q < 0)
+    }
+    expect(findMismatches(store.values())).toEqual([])
+  })
+
+  it('ignores a mask that would leave a cell with no states', async () => {
+    const store: TileStore = new Map()
+    const empty = new Uint32Array(getDefaultRules().words)
+    const result = solveChunk(store, { i: 0, j: 0 }, { worldSeed: 3, maskFor: () => empty })
+    expect(result.ok).toBe(true)
+    expect(store.size).toBe(217)
   })
 })

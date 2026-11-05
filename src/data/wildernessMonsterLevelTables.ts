@@ -7,9 +7,9 @@
 // Level for the hex's Danger Level down that terrain's own 20-row table to get an actual creature
 // name.
 //
-// Scope: the book has 13 wilderness terrain tables total, but this project's `Terrain` type (7
-// values) only needs the 6 that `encounterFrequencyTables.ts` already maps onto —
-// Grassland->Plains, Forest/jungle->Jungle, River/coast->Aquatic, Ocean->Marine,
+// Scope: the book has 13 wilderness terrain tables total, but this project's `Terrain` type (8
+// values) only needs the 7 that `encounterFrequencyTables.ts` already maps onto —
+// Grassland->Plains, Forest/jungle->Jungle, Coast->Aquatic, Ocean->Marine, Hills->Hills,
 // Mountain->Mountains, Desert/arctic->Desert. Swamp->Wetlands has NO dedicated name table in the
 // source ("Wetlands has no further breakdown table in the source material — treat it as a Rural
 // or Marine encounter, DM's choice") — Marine is reused here rather than transcribing the
@@ -122,9 +122,8 @@ const PLAINS: TerrainMonsterTable = {
 // rolls down each terrain table's column — a low-Danger hex only ever reaches the earlier, tamer
 // rows (the book's own ordering, weakest to strongest); a Danger Level 7+ hex is "exposed to the
 // full table, rare and legendary entries included."
-// Hills (added 2026-11-02 for punch-list item 1a, which adds a Hills terrain). Transcribed
-// verbatim from the same source section's "Hills" tables. Exported but not yet used: it gets
-// wired into TERRAIN_MONSTER_TABLES when the Hills terrain is added to the Terrain type.
+// Hills (added 2026-11-02 for punch-list item 1a; wired in with the Hills terrain in M2).
+// Transcribed verbatim from the same source section's "Hills" tables.
 export const HILLS: TerrainMonsterTable = {
   Airborne: ['Flightless Bird', 'Flightless Bird', 'Flightless Bird', 'Flightless Bird', 'Flightless Bird', 'Eagle, Giant', 'Chimera', 'Cockatrice', 'Griffon', 'Harpy', 'Harpy', 'Harpy', 'Nightmare', 'Pegasus', 'Pixie', 'Shedu', 'Stirge', 'Stirge', 'Stirge', 'Wyvern'],
   Animal: ['Cat, Great', 'Cat, Great', 'Dog', 'Dog', 'Horse', 'Rat', 'Rat', 'Rat', 'Rat', 'Rat', 'Snake, Pit Viper', 'Snake, Pit Viper', 'Snake, Rock Python', 'Snake, Spitting Cobra', 'Snake, Giant Rattler', 'Wolf', 'Wolf', 'Wolf', 'Wolf', 'Wolverine'],
@@ -149,8 +148,9 @@ export function wildernessEncounterLevelDie(hexDangerLevel: number): 8 | 14 | 20
 const TERRAIN_MONSTER_TABLES: Record<Terrain, TerrainMonsterTable> = {
   Grassland: PLAINS,
   'Forest/jungle': JUNGLE,
-  'River/coast': AQUATIC,
+  Coast: AQUATIC,
   Ocean: MARINE,
+  Hills: HILLS,
   Mountain: MOUNTAINS,
   'Desert/arctic': DESERT,
   // Wetlands (Swamp's OSR counterpart) has no dedicated table in the source — reuses Marine, per

@@ -15,6 +15,9 @@
 //   on the trail, so backtracking restores them. hex-map-wfc doesn't record them, so after a
 //   backtrack those states stayed removed for the rest of the try.
 // - Logging and the collapse-order record (hex-map-wfc's drop-in animation) are removed.
+// - `maskFor` (new): optional allowed states per cell, applied when cells are created (the
+//   world layer uses it to keep water at sea and to steer elevation). A mask that would leave
+//   a cell with no states is ignored for that cell.
 //
 // Terms:
 // - solve cells: the region being solved; each starts with every state possible.
@@ -37,10 +40,14 @@ export type Conflict = {
   dir: HexDir
 }
 
+// Allowed states for a solve cell (a bitset over AdjacencyRules.states), or null for any.
+export type MaskFor = (key: string) => Uint32Array | null
+
 export type SolverOptions = {
   rng: Rng
   maxTries?: number
   maxBacktracks?: number
+  maskFor?: MaskFor
 }
 
 // Direction index → index of the opposite direction.
@@ -62,6 +69,7 @@ export class HexWFCSolver {
   private readonly rng: Rng
   private readonly maxTries: number
   private readonly maxBacktracks: number
+  private readonly maskFor: MaskFor | null
   private readonly W: number
 
   // Solve cells, by index.
@@ -72,6 +80,7 @@ export class HexWFCSolver {
   private collapsed: Uint8Array = new Uint8Array(0)
   private tiles: (TileState | null)[] = []
   private links: Link[][] = []
+  private maskedCells: number[] = [] // cells narrowed by maskFor, to propagate from
 
   // Fixed cells, by index. fixedClasses[f][d] = edge class of its edge in direction d.
   private fixedKeys: string[] = []
@@ -101,6 +110,7 @@ export class HexWFCSolver {
     this.rng = options.rng
     this.maxTries = options.maxTries ?? 2
     this.maxBacktracks = options.maxBacktracks ?? 500
+    this.maskFor = options.maskFor ?? null
     this.W = rules.words
     this.allowed = new Uint32Array(this.W)
   }
@@ -198,6 +208,7 @@ export class HexWFCSolver {
       this.stack.push(n)
     }
     for (let f = 0; f < this.fixedKeys.length; f++) this.stack.push(-f - 1)
+    for (const n of this.maskedCells) this.stack.push(n)
   }
 
   private init(solveCells: Cube[], fixedCells: PlacedTile[]): void {
@@ -206,6 +217,19 @@ export class HexWFCSolver {
     this.index = new Map(this.keys.map((k, i) => [k, i]))
     this.bits = solveCells.map(() => this.rules.full.slice())
     this.counts = new Int32Array(n).fill(this.rules.stateCount)
+    this.maskedCells = []
+    if (this.maskFor) {
+      for (let i = 0; i < n; i++) {
+        const mask = this.maskFor(this.keys[i])
+        if (!mask) continue
+        let count = 0
+        for (let w = 0; w < this.W; w++) count += popcount(this.bits[i][w] & mask[w])
+        if (count === 0) continue // an impossible mask is ignored rather than failing the solve
+        for (let w = 0; w < this.W; w++) this.bits[i][w] &= mask[w]
+        this.counts[i] = count
+        this.maskedCells.push(i)
+      }
+    }
     this.collapsed = new Uint8Array(n)
     this.tiles = new Array(n).fill(null)
 

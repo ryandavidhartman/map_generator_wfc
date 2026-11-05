@@ -1,14 +1,18 @@
 import { describe, expect, it } from 'vitest'
-import { solveChunk, tilesNearChunk } from './chunks'
+import { tilesNearChunk } from '../wfc/chunks'
+import { keyOf } from '../wfc/cube'
+import type { TileStore } from '../wfc/recovery'
 import { WfcClient, type WorkerLike } from './client'
-import { keyOf } from './cube'
+import type { WorldParams } from './fields'
 import { handleSolveChunkRequest, type SolveChunkRequest, type SolveChunkResponse } from './protocol'
-import type { TileStore } from './recovery'
+import { fieldsFor, solveWorldChunk } from './solve'
+
+const world = (seed: number): WorldParams => ({ seed, offsetX: 0, offsetY: 0 })
 
 function grownStore(seed: number): TileStore {
   const store: TileStore = new Map()
-  solveChunk(store, { i: 0, j: 0 }, { worldSeed: seed })
-  solveChunk(store, { i: 1, j: 0 }, { worldSeed: seed })
+  solveWorldChunk(store, { i: 0, j: 0 }, fieldsFor(world(seed)))
+  solveWorldChunk(store, { i: 1, j: 0 }, fieldsFor(world(seed)))
   return store
 }
 
@@ -19,16 +23,16 @@ describe('handleSolveChunkRequest', () => {
   it('gives the same result from just the nearby tiles as from the whole store', () => {
     const chunk = { i: 0, j: 1 }
     const full = grownStore(8)
-    const req: SolveChunkRequest = { id: 1, worldSeed: 8, chunk, tiles: tilesNearChunk(full, chunk), lockedKeys: [] }
+    const req: SolveChunkRequest = { id: 1, world: world(8), chunk, tiles: tilesNearChunk(full, chunk), lockedKeys: [] }
     const viaWorker = handleSolveChunkRequest(req)
-    const direct = solveChunk(full, chunk, { worldSeed: 8 })
+    const direct = solveWorldChunk(full, chunk, fieldsFor(world(8)))
     expect(viaWorker.ok).toBe(true)
     expect(sortByKey(viaWorker.updates)).toEqual(sortByKey(direct.updates))
   })
 
   it('reports errors instead of throwing', () => {
     const store = grownStore(1)
-    const res = handleSolveChunkRequest({ id: 7, worldSeed: 1, chunk: { i: 0, j: 0 }, tiles: [...store.values()], lockedKeys: [] })
+    const res = handleSolveChunkRequest({ id: 7, world: world(1), chunk: { i: 0, j: 0 }, tiles: [...store.values()], lockedKeys: [] })
     expect(res).toMatchObject({ id: 7, ok: false })
     expect(res.error).toMatch(/already solved/)
   })
@@ -56,8 +60,8 @@ describe('WfcClient', () => {
     const client = new WfcClient(worker)
     const store = grownStore(4)
     const [a, b] = await Promise.all([
-      client.solveChunk(store, { i: 0, j: 1 }, { worldSeed: 4, lockedKeys: ['-4,8,-4', '999,0,-999'] }),
-      client.solveChunk(store, { i: -1, j: 0 }, { worldSeed: 4 }),
+      client.solveChunk(store, { i: 0, j: 1 }, { world: world(4), lockedKeys: ['-4,8,-4', '999,0,-999'] }),
+      client.solveChunk(store, { i: -1, j: 0 }, { world: world(4) }),
     ])
     expect([a.id, b.id]).toEqual([1, 2])
     expect(a.ok && b.ok).toBe(true)
@@ -68,7 +72,7 @@ describe('WfcClient', () => {
   it('fails pending requests on terminate', async () => {
     const worker: WorkerLike = { onmessage: null, onerror: null, postMessage() {}, terminate() {} }
     const client = new WfcClient(worker)
-    const pending = client.solveChunk(new Map(), { i: 0, j: 0 }, { worldSeed: 1 })
+    const pending = client.solveChunk(new Map(), { i: 0, j: 0 }, { world: world(1) })
     client.terminate()
     await expect(pending).resolves.toMatchObject({ ok: false, error: 'terminated' })
   })
@@ -76,7 +80,7 @@ describe('WfcClient', () => {
   it('fails pending requests when the worker errors', async () => {
     const worker: WorkerLike = { onmessage: null, onerror: null, postMessage() {}, terminate() {} }
     const client = new WfcClient(worker)
-    const pending = client.solveChunk(new Map(), { i: 0, j: 0 }, { worldSeed: 1 })
+    const pending = client.solveChunk(new Map(), { i: 0, j: 0 }, { world: world(1) })
     worker.onerror?.({ message: 'boom' } as ErrorEvent)
     await expect(pending).resolves.toMatchObject({ ok: false, error: 'worker error: boom' })
   })

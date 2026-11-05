@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { MapProvider, useMapState } from '../state/MapContext'
 import type { MapState } from '../state/mapReducer'
-import { TERRAIN_ORDER, type Terrain } from '../data/tables'
+import { ALL_TERRAINS, type Terrain } from '../data/tables'
 import { locationFeatureForD200 } from '../data/locationTables'
 import { pointOfInterestForFeatureRoll } from '../engine/generateHex'
 import { HexSiteContent } from '../components/hexdetail/HexSiteContent'
@@ -64,9 +64,9 @@ export function PoiReviewPage() {
           </p>
         )}
         <label>
-          Terrain (affects the terrain-keyed Cataclysm/Natural landmark rows, and a settlement's sea/river — there are no neighbors here, so Ocean and River/coast pick a random side)
+          Terrain (affects the terrain-keyed Cataclysm/Natural landmark rows, and a settlement's sea/river — there are no neighbors here, so Ocean and Coast pick a random side)
           <select value={terrain} onChange={(e) => setTerrain(e.target.value as Terrain)}>
-            {TERRAIN_ORDER.map((t) => (
+            {ALL_TERRAINS.map((t) => (
               <option key={t} value={t}>
                 {t}
               </option>

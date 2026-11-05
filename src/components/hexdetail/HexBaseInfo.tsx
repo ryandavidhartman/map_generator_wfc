@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMapDispatch, useMapState } from '../../state/MapContext'
 import { isAdjacentToParty, type Hex } from '../../state/mapReducer'
-import { TERRAIN_ORDER, type DangerLevel, type Terrain } from '../../data/tables'
+import { ALL_TERRAINS, type DangerLevel, type Terrain } from '../../data/tables'
 import { TERRAIN_TO_ENCOUNTER_KEYS } from '../../data/encounterTables'
 import { EncounterRoller } from '../EncounterRoller'
 
@@ -115,7 +115,7 @@ function HexEditForm({ hex, onDone }: { hex: Hex; onDone: () => void }) {
       <label>
         Terrain
         <select value={terrain} onChange={(e) => setTerrain(e.target.value as Terrain)}>
-          {TERRAIN_ORDER.map((t) => (
+          {ALL_TERRAINS.map((t) => (
             <option key={t} value={t}>
               {t}
             </option>

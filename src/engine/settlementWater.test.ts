@@ -3,8 +3,8 @@
 //
 //   Settlement's hex | Neighbors              | Water on the map
 //   Ocean            | any                    | Coast toward the Ocean neighbors (random side if none known)
-//   River/coast      | an Ocean neighbor      | Coast on that side
-//   River/coast      | no Ocean neighbor      | River, toward a River/coast neighbor if any, else random
+//   Coast      | an Ocean neighbor      | Coast on that side
+//   Coast      | no Ocean neighbor      | River, toward a Coast neighbor if any, else random
 //   any other        | an Ocean neighbor      | Coast on that side
 //   any other        | no Ocean neighbor      | No water
 //
@@ -14,7 +14,7 @@
 import { describe, expect, it } from 'vitest'
 import { computeSettlementPlan, waterForHex, waterForMapHex, type Pt, type SettlementPlanInput } from './settlementPlan'
 import { generateSettlement } from './generateSettlement'
-import { TERRAIN_ORDER, type Terrain } from '../data/tables'
+import { ALL_TERRAINS, type Terrain } from '../data/tables'
 import { axialToPixel, hexId, neighborsOf, type AxialCoord } from '../hexgrid/hexMath'
 import type { SettlementType } from '../data/settlementTables'
 
@@ -27,7 +27,7 @@ function seededRng(seed: number): () => number {
 }
 
 const TYPES: SettlementType[] = ['Village', 'Town', 'City', 'Metropolis']
-const DRY_TERRAINS = TERRAIN_ORDER.filter((t) => t !== 'Ocean' && t !== 'River/coast')
+const DRY_TERRAINS = ALL_TERRAINS.filter((t) => t !== 'Ocean' && t !== 'Coast')
 const CENTER: AxialCoord = { q: 0, r: 0 }
 
 function inputFor(seed: number, type: SettlementType): Omit<SettlementPlanInput, 'water'> {
@@ -67,18 +67,18 @@ describe('water rules table, every terrain', () => {
   const scenarios: { label: string; neighbors: { terrain: Terrain; angle: number }[] }[] = [
     { label: 'no revealed neighbors', neighbors: [] },
     { label: 'only dry neighbors', neighbors: [{ terrain: 'Grassland', angle: 0 }, { terrain: 'Mountain', angle: 1 }] },
-    { label: 'a River/coast neighbor', neighbors: [{ terrain: 'River/coast', angle: east.angle }] },
-    { label: 'an Ocean neighbor', neighbors: [{ terrain: 'Ocean', angle: east.angle }, { terrain: 'River/coast', angle: 2 }] },
+    { label: 'a Coast neighbor', neighbors: [{ terrain: 'Coast', angle: east.angle }] },
+    { label: 'an Ocean neighbor', neighbors: [{ terrain: 'Ocean', angle: east.angle }, { terrain: 'Coast', angle: 2 }] },
   ]
 
   function expected(terrain: Terrain, label: string) {
     if (label === 'an Ocean neighbor') return { kind: 'coast', angle: east.angle }
     if (terrain === 'Ocean') return { kind: 'coast' }
-    if (terrain === 'River/coast') return label === 'a River/coast neighbor' ? { kind: 'river', angle: east.angle } : { kind: 'river' }
+    if (terrain === 'Coast') return label === 'a Coast neighbor' ? { kind: 'river', angle: east.angle } : { kind: 'river' }
     return null
   }
 
-  for (const terrain of TERRAIN_ORDER) {
+  for (const terrain of ALL_TERRAINS) {
     for (const { label, neighbors } of scenarios) {
       it(`${terrain} hex with ${label}`, () => {
         const got = waterForHex(terrain, neighbors)
@@ -91,12 +91,12 @@ describe('water rules table, every terrain', () => {
     }
   }
 
-  it('an Ocean neighbor beats a River/coast neighbor on a River/coast hex (coast, not river)', () => {
-    expect(waterForHex('River/coast', [{ terrain: 'River/coast', angle: 1 }, { terrain: 'Ocean', angle: 2 }])).toEqual({ kind: 'coast', angle: expect.closeTo(2, 9) })
+  it('an Ocean neighbor beats a Coast neighbor on a Coast hex (coast, not river)', () => {
+    expect(waterForHex('Coast', [{ terrain: 'Coast', angle: 1 }, { terrain: 'Ocean', angle: 2 }])).toEqual({ kind: 'coast', angle: expect.closeTo(2, 9) })
   })
 
-  it('a dry hex ignores River/coast neighbors entirely (rivers only run through River/coast hexes)', () => {
-    for (const terrain of DRY_TERRAINS) expect(waterForHex(terrain, NEIGHBORS.map((n) => ({ terrain: 'River/coast' as const, angle: n.angle })))).toBeNull()
+  it('a dry hex ignores Coast neighbors entirely (rivers only run through Coast hexes)', () => {
+    for (const terrain of DRY_TERRAINS) expect(waterForHex(terrain, NEIGHBORS.map((n) => ({ terrain: 'Coast' as const, angle: n.angle })))).toBeNull()
   })
 })
 
@@ -141,17 +141,17 @@ describe('waterForMapHex — reading the overland map', () => {
     expect(waterForMapHex(hex, hexes)).toEqual({ kind: 'coast' })
   })
 
-  it('with several River/coast neighbors, the river heads toward the first in neighbor order', () => {
+  it('with several Coast neighbors, the river heads toward the first in neighbor order', () => {
     // Today's behavior, pinned so a change is deliberate; the rule itself doesn't say which.
     const [first, , third] = NEIGHBORS
-    const { hex, hexes } = mapWith('River/coast', { [third.id]: 'River/coast', [first.id]: 'River/coast' })
+    const { hex, hexes } = mapWith('Coast', { [third.id]: 'Coast', [first.id]: 'Coast' })
     const water = waterForMapHex(hex, hexes)
     expect(water?.kind).toBe('river')
     expect(angleGap(water!.angle!, first.angle)).toBeLessThan(1e-9)
   })
 
-  it('a River/coast hex with only dry neighbors gets a river in a random direction', () => {
-    const { hex, hexes } = mapWith('River/coast', { [NEIGHBORS[2].id]: 'Mountain' })
+  it('a Coast hex with only dry neighbors gets a river in a random direction', () => {
+    const { hex, hexes } = mapWith('Coast', { [NEIGHBORS[2].id]: 'Mountain' })
     expect(waterForMapHex(hex, hexes)).toEqual({ kind: 'river' })
   })
 
@@ -180,8 +180,8 @@ describe('from the overland map to the drawn town map', () => {
     }
   })
 
-  it.each(NEIGHBORS.map((n) => ({ id: n.id, angle: n.angle })))('River/coast at $id: the drawn river runs along that direction', ({ id, angle }) => {
-    const { hex, hexes } = mapWith('River/coast', { [id]: 'River/coast' })
+  it.each(NEIGHBORS.map((n) => ({ id: n.id, angle: n.angle })))('Coast at $id: the drawn river runs along that direction', ({ id, angle }) => {
+    const { hex, hexes } = mapWith('Coast', { [id]: 'Coast' })
     for (const type of TYPES) {
       for (const seed of SEEDS) {
         const plan = computeSettlementPlan({ ...inputFor(seed, type), water: waterForMapHex(hex, hexes) })
@@ -194,7 +194,7 @@ describe('from the overland map to the drawn town map', () => {
 
   it('a dry hex with no Ocean neighbor draws no water at all', () => {
     for (const terrain of DRY_TERRAINS) {
-      const { hex, hexes } = mapWith(terrain, { [NEIGHBORS[1].id]: 'River/coast', [NEIGHBORS[3].id]: 'Grassland' })
+      const { hex, hexes } = mapWith(terrain, { [NEIGHBORS[1].id]: 'Coast', [NEIGHBORS[3].id]: 'Grassland' })
       const plan = computeSettlementPlan({ ...inputFor(5, 'City'), water: waterForMapHex(hex, hexes) })
       expect(plan.water).toBeNull()
     }

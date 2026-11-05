@@ -1,21 +1,22 @@
 // Messages between the main thread (WfcClient) and the WFC worker.
 //
-// A request carries only the tiles near the chunk (tilesNearChunk), so the worker holds no
-// state between requests and the same request always gives the same result.
+// A request carries the world params and only the tiles near the chunk (tilesNearChunk), so
+// the worker holds no state between requests (beyond caches) and the same request always gives
+// the same result.
 
-import { solveChunk, type ChunkCoord } from './chunks'
-import { keyOf } from './cube'
-import type { RegionSolveStats, TileStore } from './recovery'
-import type { PlacedTile } from './rules'
-import type { Cube } from './cube'
+import type { ChunkCoord } from '../wfc/chunks'
+import { keyOf, type Cube } from '../wfc/cube'
+import type { RegionSolveStats, TileStore } from '../wfc/recovery'
+import type { PlacedTile } from '../wfc/rules'
+import type { WorldParams } from './fields'
+import { fieldsFor, solveWorldChunk } from './solve'
 
 export type SolveChunkRequest = {
   id: number
-  worldSeed: number
+  world: WorldParams
   chunk: ChunkCoord
   tiles: PlacedTile[]
   lockedKeys: string[]
-  initialCollapses?: PlacedTile[]
 }
 
 export type SolveChunkResponse = {
@@ -24,6 +25,7 @@ export type SolveChunkResponse = {
   updates: PlacedTile[]
   dropped: Cube[]
   stats: RegionSolveStats
+  unbrokenRiverLoops?: number
   error?: string
 }
 
@@ -31,11 +33,7 @@ export function handleSolveChunkRequest(req: SolveChunkRequest): SolveChunkRespo
   try {
     const store: TileStore = new Map(req.tiles.map((t) => [keyOf(t), t]))
     const locked = new Set(req.lockedKeys)
-    const result = solveChunk(store, req.chunk, {
-      worldSeed: req.worldSeed,
-      isLocked: (k) => locked.has(k),
-      initialCollapses: req.initialCollapses,
-    })
+    const result = solveWorldChunk(store, req.chunk, fieldsFor(req.world), { isLocked: (k) => locked.has(k) })
     return { id: req.id, ...result }
   } catch (e) {
     return {

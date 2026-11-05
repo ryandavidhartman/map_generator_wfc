@@ -32,8 +32,8 @@ describe('Hex Terrain table (2d6)', () => {
     [6, 'Grassland'],
     [7, 'Forest/jungle'],
     [8, 'Forest/jungle'],
-    [9, 'River/coast'],
-    [10, 'River/coast'],
+    [9, 'Coast'],
+    [10, 'Coast'],
     [11, 'Ocean'],
     [12, 'Mountain'],
   ] as const)('roll %i -> %s', (roll, terrain) => {

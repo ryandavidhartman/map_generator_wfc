@@ -9,8 +9,8 @@
 // OSR's wilderness frequency table uses its own broad terrain terms (Clear/Grasslands, Woods,
 // River, Mountains, Desert, Inhabited, Ocean, Jungle, Hills, Barren, plus Aerial for airborne
 // travel) via a documented "Terrain Name Cross-Reference," not this project's core
-// Terrain type (Desert/arctic, Swamp, Grassland, Forest/jungle, River/coast, Ocean, Mountain —
-// 7 types, deliberately coarser). Mapped by closest match below, same "treat other terrain
+// Terrain type (Desert/arctic, Swamp, Grassland, Forest/jungle, Coast, Ocean, Hills, Mountain —
+// 8 types, deliberately coarser). Mapped by closest match below, same "treat other terrain
 // types as whichever entry is the closest match" latitude the book itself grants: Forest/jungle
 // takes Jungle's chance (the wider, more encounter-prone of the two source rows it merges,
 // since the core rules don't distinguish them) and Swamp takes the book's own suggested fallback
@@ -18,21 +18,21 @@
 
 import type { Terrain } from './tables'
 
+// Hills (added 2026-11-02 for punch-list item 1a; wired in with the Hills terrain in M2): the
+// book's own "Hills 5-6" row.
+export const HILLS_ENCOUNTER_CHANCE: number[] = [5, 6]
+
 // The set of 1d6 results that trigger an encounter for this terrain.
 const WILDERNESS_ENCOUNTER_CHANCE: Record<Terrain, number[]> = {
   Grassland: [6],
   'Forest/jungle': [4, 5, 6],
-  'River/coast': [5, 6],
+  Coast: [5, 6],
   Ocean: [5, 6],
+  Hills: HILLS_ENCOUNTER_CHANCE,
   Mountain: [4, 5, 6],
   'Desert/arctic': [5, 6],
   Swamp: [5, 6],
 }
-
-// Hills (added 2026-11-02 for punch-list item 1a, which adds a Hills terrain): the book's own
-// "Hills 5-6" row. Exported but not yet used; it moves into WILDERNESS_ENCOUNTER_CHANCE when the
-// Hills terrain is added to the Terrain type.
-export const HILLS_ENCOUNTER_CHANCE: number[] = [5, 6]
 
 export function wildernessEncounterChanceForTerrain(terrain: Terrain): number[] {
   return WILDERNESS_ENCOUNTER_CHANCE[terrain]
@@ -63,7 +63,7 @@ export function encounterPurposeForD8(roll: number): string {
 // (wildernessMonsterLevelTables.ts, via rollEncounter.ts's rollWildernessMonster).
 //
 // Terrain mapping reuses the book's own "Terrain Name Cross-Reference" (~lines 892-919) where it
-// applies directly (Grassland->Plains, Mountain->Mountains, Ocean->Marine, River/coast->Aquatic);
+// applies directly (Grassland->Plains, Mountain->Mountains, Ocean->Marine, Coast->Aquatic, Hills->Hills);
 // Forest/jungle->Jungle matches the choice already made above for Encounter Frequency (the wider
 // of the two source rows this project's coarser Terrain type merges); Desert/arctic->Desert picks
 // the more literal of its two merged source terms (Arctic has its own Category Summary row too,
@@ -200,8 +200,7 @@ const TERRAIN_CATEGORY_ROWS: Record<'Plains' | 'Jungle' | 'Aquatic' | 'Marine' |
     { min: 81, max: 95, category: 'Water' },
     { min: 96, max: 100, category: 'Special' },
   ],
-  // Hills (added 2026-11-02 for punch-list item 1a), verbatim from the source's Hills row. Not
-  // yet reached by any Terrain; exported via HILLS_CATEGORY_TABLE below until Hills exists.
+  // Hills (added 2026-11-02 for punch-list item 1a), verbatim from the source's Hills row.
   Hills: [
     { min: 1, max: 15, category: 'Airborne' },
     { min: 16, max: 25, category: 'Animal' },
@@ -218,14 +217,15 @@ const TERRAIN_CATEGORY_ROWS: Record<'Plains' | 'Jungle' | 'Aquatic' | 'Marine' |
   ],
 }
 
-// The Hills category d100, ready to become TERRAIN_CATEGORY_TABLES' Hills entry.
+// The Hills category d100 (TERRAIN_CATEGORY_TABLES' Hills entry).
 export const HILLS_CATEGORY_TABLE: WildernessEncounterCategory[] = expandCategoryD100(TERRAIN_CATEGORY_ROWS.Hills)
 
 const TERRAIN_CATEGORY_TABLES: Record<Terrain, WildernessEncounterCategory[]> = {
   Grassland: expandCategoryD100(TERRAIN_CATEGORY_ROWS.Plains),
   'Forest/jungle': expandCategoryD100(TERRAIN_CATEGORY_ROWS.Jungle),
-  'River/coast': expandCategoryD100(TERRAIN_CATEGORY_ROWS.Aquatic),
+  Coast: expandCategoryD100(TERRAIN_CATEGORY_ROWS.Aquatic),
   Ocean: expandCategoryD100(TERRAIN_CATEGORY_ROWS.Marine),
+  Hills: HILLS_CATEGORY_TABLE,
   Mountain: expandCategoryD100(TERRAIN_CATEGORY_ROWS.Mountains),
   'Desert/arctic': expandCategoryD100(TERRAIN_CATEGORY_ROWS.Desert),
   Swamp: expandCategoryD100(TERRAIN_CATEGORY_ROWS.Wetlands),
