@@ -429,9 +429,51 @@ revealed-is-fixed rule.
   the new chunks joining the old seamlessly. The drop animation wasn't watched (it only runs
   with animation on, too slow in software rendering).
 
-**M6 — Map-aware points of interest.** Settlement anchors, 3D and 2D markers, and
+**M6 — Map-aware points of interest. ✅ Done 2026-11-05.** Settlement anchors, 3D and 2D markers, and
 `waterForHex` reading real tile edges. This picks up map_generator's punch-list items 1b and 1c
 (town-map rivers following their real edges, and combined water) as follow-ups.
+Decisions (user, 2026-11-05), answering open question 1:
+- **Add:** settlement anchors become settlements, and the d200 still gives settlements anywhere
+  as today. Anchors are road ends, road junctions (3+ roads) and river crossings: about 6.4% of
+  land hexes, so roughly 12% of revealed hexes end up settlements (6% before). An anchor's
+  Village/Town/City/Metropolis comes from re-rolling the d200 until it lands on a settlement
+  row, so the type odds stay the table's. (No coast anchors: coast tiles never carry roads.)
+- **Markers:** 3D models per kind (settlement buildings sized by type, tower, fort for keeps,
+  mine for dungeons, standing stones for shrines) and new models for camps (tents and a fire)
+  and rifts (glowing shards). 2D icons per kind instead of the yellow dot.
+
+
+Built:
+- `src/world/anchors.ts`: `isSettlementAnchor(tileType)` (road end, 3+ roads, river crossing).
+  Read from the tile at reveal, so nothing is saved. `rollAnchorSettlement` (generateHex.ts)
+  re-rolls the d200 until a settlement row. Applies on reveal, on the starting hex and on
+  Reroll (an anchor stays a settlement; which one is re-rolled).
+- **Town-map water from tile edges** (`waterForEdges`, settlementPlan.ts): the coast faces the
+  hex's sea edges (shoreline edges count half, so a tile touching water only at a corner faces
+  that corner); otherwise a river leaves through the hex's first river edge; an Ocean hex keeps
+  its random-side coast. Used whenever the hex has a tile (the /poi review page still uses
+  revealed neighbors). The isthmus problem from punch-list 1a can't happen: a tile's water edges
+  are contiguous. River bends and lakes are still 1b and 1c.
+- **3D:** POI models from `planPoiModels` (scenery.ts) in spots clear of the hex's road, river
+  or water (`poiSlots`): Village 2 houses and a well, Town 3 houses, church, market, City town
+  hall, church, market, tower, 2 houses, Metropolis adds a smithy and a house (buildings scaled
+  0.5 down to 0.38); Tower the tower with its roof; Keep the fort; Dungeon the mine; Shrine the
+  standing stones. Camps (two tents and a fire) and rifts (a dark scar with glowing violet
+  shards) are built from simple shapes. A POI's models replace the hex's trees (a bridge
+  stays). Landmarks, cataclysms, hand-edited POIs and anything on open water keep the gem.
+- **2D:** a glyph per kind inside the yellow badge (house, tower, keep, cave mouth, standing
+  stones, tent, rift), listed in the legend. The party dot moves aside on a POI hex.
+- **Bug fix, river-loop breaking (from M2):** a loop through a new chunk can close far outside
+  it, and the breaker patched at the closing edge even near the edge of the tiles a worker
+  request carries, where the patch can't see its outer neighbors. That left edge mismatches
+  (10 in one 30-chunk walk). The patch now goes on a loop cell inside the new chunk
+  (`loopCells`, `canBreakAt`). `npm run sim` (20 seeds): 0 failed, 0 dropped, river loops 0.15
+  per world (0.1 in M2). Twelve 30-chunk walks: 0 dropped cells, 0 edge mismatches. The growth
+  test now allows a rare drop as long as every mismatch is at a dropped cell (one drop was
+  seen in 360 solves before the fix).
+- 16 new tests (1,129 in all). Browser check (production build, WebGL2 fallback): a save
+  seeded with one POI of every kind shows every glyph in 2D and every model in 3D. Not seen in
+  normal play yet, nor on real WebGPU.
 
 **M7 — GM editing.** Pin a tile and re-solve locally, with the mismatch flag.
 
@@ -478,7 +520,8 @@ revealed-is-fixed rule.
 
 ## Open questions (decide when we get there)
 
-1. Settlement anchor rate: should anchors replace the d200 settlement rows, or add to them? (M6)
+1. ~~Settlement anchor rate: should anchors replace the d200 settlement rows, or add to them?~~
+   Answered 2026-11-05: add (see M6).
 2. Is a hex 6 miles across, as in map_generator? A 217-hex chunk is then about 100 miles
    across. (M2)
 3. Should roads be game data (faster travel, more encounters along roads) or just look? (M3)

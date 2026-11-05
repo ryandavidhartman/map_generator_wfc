@@ -72,12 +72,23 @@ export function rollPointOfInterest(terrain: Terrain, rng: Rng = Math.random): P
   return pointOfInterestForFeatureRoll(terrain, rollDie(200, rng), rng)
 }
 
+// A settlement anchor's point of interest (world/anchors.ts): always a settlement. The d200 is
+// re-rolled until it lands on a settlement row, so the Village/Town/City/Metropolis odds are the
+// Feature table's own. The 1-in-6 gate doesn't apply: an anchor always has one.
+export function rollAnchorSettlement(terrain: Terrain, rng: Rng = Math.random): PointOfInterest {
+  for (;;) {
+    const roll = rollDie(200, rng)
+    if (locationFeatureForD200(roll).routesTo === 'settlement') return pointOfInterestForFeatureRoll(terrain, roll, rng)
+  }
+}
+
 // A revealed hex's game data. Terrain comes from the map (the hex's WFC tile, see
 // world/terrain.ts); danger and the point of interest are rolled here, at reveal.
-export function generateHexDetails(terrain: Terrain, rng: Rng = Math.random): GeneratedHexDetails {
+// `anchor`: the hex is a settlement anchor, so its point of interest is a settlement.
+export function generateHexDetails(terrain: Terrain, rng: Rng = Math.random, anchor = false): GeneratedHexDetails {
   return {
     terrain,
     danger: rollDangerLevel(rng),
-    poi: rollPointOfInterest(terrain, rng),
+    poi: anchor ? rollAnchorSettlement(terrain, rng) : rollPointOfInterest(terrain, rng),
   }
 }

@@ -1,6 +1,7 @@
 import type { Rng } from '../engine/dice'
 import {
   generateHexDetails,
+  rollAnchorSettlement,
   rollDangerLevel,
   rollPointOfInterest,
   type PointOfInterest,
@@ -10,6 +11,7 @@ import { dangerLevelDelta, type DangerLevel, type Terrain } from '../data/tables
 import { hexId, neighborsOf, parseHexId, type AxialCoord } from '../hexgrid/hexMath'
 import type { WorldParams } from '../world/fields'
 import { applyChunkResult } from '../world/growth'
+import { isSettlementAnchor } from '../world/anchors'
 import { geoAt, type SavedTiles } from '../world/hexTiles'
 import type { PlacedTile } from '../wfc/rules'
 
@@ -120,6 +122,12 @@ export function isRevealableNow(state: MapState, id: string): boolean {
   return isSolved(state, id) && isAdjacentToParty(state, id)
 }
 
+// Whether a hex's tile makes it a settlement anchor (world/anchors.ts).
+function isAnchorHex(tiles: SavedTiles, id: string): boolean {
+  const t = tiles[id]
+  return Boolean(t) && isSettlementAnchor(t[0])
+}
+
 // The terrain a hex reveals as: its tile's derived terrain.
 function terrainAt(state: MapState, id: string): Terrain | null {
   if (!state.world) return null
@@ -133,7 +141,7 @@ export function mapReducer(state: MapState, action: MapAction): MapState {
       const coord = parseHexId(id)
       const terrain = geoAt(action.world, action.tiles, id)?.terrain
       if (!terrain) return state
-      const details = generateHexDetails(terrain, action.rng)
+      const details = generateHexDetails(terrain, action.rng, isAnchorHex(action.tiles, id))
       // No neighbors exist yet — the starting hex is always Danger Level 1, fixed.
       const startHex: Hex = { id, q: coord.q, r: coord.r, ...details, dangerLevel: 1 }
       return {
@@ -159,7 +167,7 @@ export function mapReducer(state: MapState, action: MapAction): MapState {
       const terrain = terrainAt(state, action.hexId)
       if (!terrain) return state
 
-      const details = generateHexDetails(terrain, action.rng)
+      const details = generateHexDetails(terrain, action.rng, isAnchorHex(state.tiles, action.hexId))
       const dangerLevel = computeHexDangerLevel(state, coord, details.danger)
       const newHex: Hex = { id: action.hexId, q: coord.q, r: coord.r, ...details, dangerLevel }
 
@@ -186,7 +194,10 @@ export function mapReducer(state: MapState, action: MapAction): MapState {
       const hex = state.hexes[action.hexId]
       if (!hex) return state
       const danger = rollDangerLevel(action.rng)
-      const poi = rollPointOfInterest(hex.terrain, action.rng)
+      // An anchor hex stays a settlement (only which one is re-rolled).
+      const poi = isAnchorHex(state.tiles, action.hexId)
+        ? rollAnchorSettlement(hex.terrain, action.rng)
+        : rollPointOfInterest(hex.terrain, action.rng)
       const dangerLevel = computeHexDangerLevel(state, { q: hex.q, r: hex.r }, danger)
       return {
         ...state,

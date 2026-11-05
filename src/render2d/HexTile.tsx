@@ -4,6 +4,7 @@ import type { HexGeo } from '../world/terrain'
 import { axialToPixel, hexCornersPointsAttr, hexId, type AxialCoord } from '../hexgrid/hexMath'
 import { DANGER_COLORS, FEATURE_COLORS, TERRAIN_COLORS } from '../hexgrid/colors'
 import { coastWaterPath, linePath } from './tileShapes'
+import { POI_ICON_PATHS } from './poiIcons'
 
 const UNREVEALED_FILL_REVEALABLE = '#3a3a3a'
 const UNREVEALED_FILL_FOG = '#1a1a1a'
@@ -124,8 +125,31 @@ export function HexTile({ coord, size, hex, geo, showHidden, isParty, isSelected
       )}
       {drawn === 'hidden' && <polygon points={outerPoints} fill="#000000" opacity={GM_HIDDEN_DIM} />}
       <polygon points={points} fill="none" stroke={isSelected ? '#ffffff' : stroke} strokeWidth={isSelected ? 3 : 2} />
-      {hex?.poi && <circle cx={center.x} cy={center.y} r={size * 0.22} fill="#ffd54a" stroke="#00000088" strokeWidth={1} />}
-      {isParty && <circle cx={center.x} cy={center.y} r={size * 0.14} fill="#ffffff" stroke="#000000" strokeWidth={1.5} />}
+      {hex?.poi && (
+        <>
+          <circle cx={center.x} cy={center.y} r={size * 0.3} fill="#ffd54a" stroke="#00000088" strokeWidth={1} />
+          {hex.poi.siteKind && hex.poi.siteKind !== 'none' && (
+            <path
+              d={POI_ICON_PATHS[hex.poi.siteKind]}
+              transform={`translate(${center.x} ${center.y}) scale(${size * 0.19})`}
+              fill="#3b2f00"
+              fillRule="evenodd"
+              data-poi-icon={hex.poi.siteKind}
+            />
+          )}
+        </>
+      )}
+      {isParty && (
+        // Beside the POI badge when there is one, so the icon stays readable.
+        <circle
+          cx={center.x + (hex?.poi ? size * 0.42 : 0)}
+          cy={center.y + (hex?.poi ? size * 0.3 : 0)}
+          r={size * 0.14}
+          fill="#ffffff"
+          stroke="#000000"
+          strokeWidth={1.5}
+        />
+      )}
     </g>
   )
 }

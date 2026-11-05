@@ -10,6 +10,7 @@
 // their axial (q, r), which gives the same world positions.
 
 import type { Terrain } from '../data/tables'
+import type { SiteKind } from '../data/locationTables'
 import { isRevealableNow, type MapState } from '../state/mapReducer'
 import { HEX_DIRS, LEVELS_COUNT, TILE_LIST } from '../wfc/tiles'
 import { fieldsFor } from '../world/fields'
@@ -123,6 +124,8 @@ export type TileDraw = {
   // the world puts a lake here; scenery.ts plans decorations from these.
   terrain: Terrain
   lake: boolean
+  // A revealed hex's point of interest (M6: drawn as a model, see scenery.ts).
+  poi: { kind: SiteKind | 'none'; settlementType?: string } | null
 }
 
 // Every solved hex as the 3D view draws it. Unrevealed hexes are drawn too: as fog silhouettes
@@ -143,7 +146,10 @@ export function tileDraws(state: MapState, gmView: boolean): TileDraw[] {
       terrain,
       temperature: fields.sample(t).temperature,
     })
-    out.push({ id, q: t.q, r: t.r, type: t.type, rotation: t.rotation, level: t.level, look, terrain, lake: geo.lake })
+    const poi = hex?.poi
+      ? { kind: hex.poi.siteKind ?? ('none' as const), settlementType: hex.poi.forcedType ?? (hex.site?.kind === 'settlement' ? hex.site.settlementType : undefined) }
+      : null
+    out.push({ id, q: t.q, r: t.r, type: t.type, rotation: t.rotation, level: t.level, look, terrain, lake: geo.lake, poi })
   }
   return out
 }

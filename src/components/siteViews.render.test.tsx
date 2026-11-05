@@ -172,6 +172,19 @@ describe('overland map', () => {
     expect(html).toContain('<title>Unrevealed: ')
   })
 
+  it('draws an icon for each point of interest by its kind', () => {
+    const base = walkedMap(2)
+    const hexes = { ...base.hexes }
+    const kinds = ['settlement', 'tower', 'keep', 'dungeon', 'shrine', 'camp', 'rift'] as const
+    kinds.forEach((kind, i) => {
+      const id = `${i},-1`
+      hexes[id] = { id, q: i, r: -1, terrain: 'Grassland', danger: 'Safe', dangerLevel: 1, poi: { location: kind, development: '', siteKind: kind } }
+    })
+    const html = renderMap({ ...base, hexes })
+    expectCleanMarkup(html)
+    for (const kind of kinds) expect(html).toContain(`data-poi-icon="${kind}"`)
+  })
+
   it('draws rivers, roads and the water side of a coast from the tile', () => {
     const base = walkedMap(1)
     // (0,-1) (north of the start, unrevealed): a river bend; (1,-1): a road; (-1,0): a coast.

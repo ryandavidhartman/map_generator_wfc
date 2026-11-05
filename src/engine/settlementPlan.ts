@@ -21,6 +21,7 @@ import { seedForString } from './towerPlan'
 import type { DistrictType, SettlementType } from '../data/settlementTables'
 import type { Terrain } from '../data/tables'
 import { axialToPixel, hexId, neighborsOf, type AxialCoord } from '../hexgrid/hexMath'
+import type { HexDir } from '../wfc/tiles'
 
 export type Pt = { x: number; y: number }
 
@@ -199,6 +200,35 @@ export function waterForMapHex(hex: AxialCoord & { terrain: Terrain }, hexes: Re
     return [{ terrain: neighbor.terrain, angle: Math.atan2(p.y - center.y, p.x - center.x) }]
   })
   return waterForHex(hex.terrain, neighbors)
+}
+
+// M6: the town map's water from the hex's real tile edges (world/terrain.ts HexGeo), used
+// whenever the hex has a solved tile (waterForMapHex above stays for hexes without one, e.g.
+// the /poi review page):
+// - an Ocean hex (a town on a small island) faces the sea on a random side, as before;
+// - sea or shoreline edges: a coast facing them (sea edges count fully, shoreline edges half,
+//   so a tile whose water only touches a corner faces that corner). A tile's water edges are
+//   always contiguous, so they can't cancel out the way opposite Ocean neighbors could;
+// - otherwise river edges: a river leaving through the first of them (the town map's river is
+//   still one straight band; punch-list 1b will bend it along both edges);
+// - otherwise no water. (Lakes are punch-list 1c.)
+// Angles are on the town map's frame (radians, y down): pointy-top edge NE is -60°, E 0°, ...
+const EDGE_ANGLE_DEG: Record<HexDir, number> = { NE: -60, E: 0, SE: 60, SW: 120, W: 180, NW: 240 }
+
+export function waterForEdges(
+  terrain: Terrain,
+  edges: { seaEdges: readonly HexDir[]; coastEdges: readonly HexDir[]; riverEdges: readonly HexDir[] },
+): SettlementWaterInput | null {
+  if (terrain === 'Ocean') return { kind: 'coast' }
+  const rad = (d: HexDir) => (EDGE_ANGLE_DEG[d] * Math.PI) / 180
+  const weighted = [...edges.seaEdges.map((d) => ({ a: rad(d), w: 1 })), ...edges.coastEdges.map((d) => ({ a: rad(d), w: 0.5 }))]
+  if (weighted.length > 0) {
+    const x = weighted.reduce((sum, e) => sum + e.w * Math.cos(e.a), 0)
+    const y = weighted.reduce((sum, e) => sum + e.w * Math.sin(e.a), 0)
+    return { kind: 'coast', angle: Math.atan2(y, x) }
+  }
+  if (edges.riverEdges.length > 0) return { kind: 'river', angle: rad(edges.riverEdges[0]) }
+  return null
 }
 
 // --- small geometry helpers -------------------------------------------------------------

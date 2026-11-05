@@ -3,7 +3,8 @@ import { useMapDispatch, useMapState } from '../../state/MapContext'
 import type { Hex } from '../../state/mapReducer'
 import type { Settlement, District } from '../../engine/generateSettlement'
 import { SettlementMapSvg, type SettlementMapDistrictData } from '../../hexgrid/SettlementMapSvg'
-import { computeSettlementPlan, waterForMapHex, type OutlineShape, type PlanWater, type StreetPattern } from '../../engine/settlementPlan'
+import { geoAt } from '../../world/hexTiles'
+import { computeSettlementPlan, waterForEdges, waterForMapHex, type OutlineShape, type PlanWater, type StreetPattern } from '../../engine/settlementPlan'
 import { DISTRICT_TYPE_TO_ENCOUNTER_KEY } from '../../data/encounterTables'
 import { generateTavern, type Tavern } from '../../engine/generateTavern'
 import { generateShop, type Shop } from '../../engine/generateShop'
@@ -54,7 +55,11 @@ export function SettlementView({ hex, site }: { hex: Hex; site: Settlement }) {
   // The water follows the hex (user rule): its own terrain plus its revealed neighbors, each
   // with its direction from this hex on the overland map.
   const mapState = useMapState()
-  const water = useMemo(() => waterForMapHex(hex, mapState.hexes), [hex, mapState.hexes])
+  // The hex's real tile edges when it has a tile (M6), else its revealed neighbors.
+  const water = useMemo(() => {
+    const geo = mapState.world ? geoAt(mapState.world, mapState.tiles, hex.id) : null
+    return geo ? waterForEdges(hex.terrain, geo) : waterForMapHex(hex, mapState.hexes)
+  }, [hex, mapState.hexes, mapState.world, mapState.tiles])
   const plan = useMemo(
     () =>
       computeSettlementPlan({

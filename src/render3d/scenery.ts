@@ -15,6 +15,7 @@
 //   or re-solving elsewhere never reshuffles a hex's trees. No per-grid caps.
 
 import type { Terrain } from '../data/tables'
+import type { SiteKind } from '../data/locationTables'
 import { mixSeed, mulberry32 } from '../wfc/rng'
 import { HEX_DIRS, TILE_LIST, TILE_TYPE, rotateHexEdges, type HexDir } from '../wfc/tiles'
 import { hexWorldPosition, rotationAngle, SURFACE_HEIGHT, tileBaseY } from './layout'
@@ -31,7 +32,33 @@ export const ROCK_MESHES = ['rock_single_A', 'rock_single_B', 'rock_single_C', '
 export const HILL_MESHES = ['hills_A', 'hills_A_trees', 'hills_B', 'hills_B_trees', 'hills_C', 'hills_C_trees', 'hill_single_A', 'hill_single_B', 'hill_single_C']
 export const MOUNTAIN_MESHES = ['mountain_A_grass', 'mountain_B_grass', 'mountain_C_grass']
 
+// Point-of-interest models (M6). Buildings from the KayKit pack; camps and rifts have no model
+// in the pack and are built in MapScene.ts (procedural).
+export const BUILDING_MESHES = {
+  homes: ['building_home_A_yellow', 'building_home_B_yellow'],
+  well: 'building_well_yellow',
+  church: 'building_church_yellow',
+  market: 'building_market_yellow',
+  townhall: 'building_townhall_yellow',
+  blacksmith: 'building_blacksmith_yellow',
+  tower: 'building_tower_A_yellow',
+  towerTop: 'building_tower_A_top_yellow',
+}
+export const SITE_MESHES = { keep: 'fort', dungeon: 'mine', shrine: 'henge' }
+// These keep their modeled origin height (hex-map-wfc keepYMeshes): the tower top sits on its
+// tower by its own offset.
+export const KEEP_Y_MESHES = new Set([...Object.values(BUILDING_MESHES).flat(), ...Object.values(SITE_MESHES)])
+
 export const ALL_DECORATION_MESHES = [
+  ...BUILDING_MESHES.homes,
+  BUILDING_MESHES.well,
+  BUILDING_MESHES.church,
+  BUILDING_MESHES.market,
+  BUILDING_MESHES.townhall,
+  BUILDING_MESHES.blacksmith,
+  BUILDING_MESHES.tower,
+  BUILDING_MESHES.towerTop,
+  ...Object.values(SITE_MESHES),
   ...TREE_MESHES.A,
   ...TREE_MESHES.B,
   'tree_C',
@@ -73,6 +100,9 @@ export type Decoration = {
   level: number // the tile's level (for the palette blend)
 }
 
+// A revealed hex's point of interest, as the 3D view needs it.
+export type PoiMark = { kind: SiteKind | 'none'; settlementType?: string }
+
 export type SceneryTile = {
   id: string
   q: number
@@ -82,7 +112,86 @@ export type SceneryTile = {
   level: number
   terrain: Terrain
   lake: boolean
+  poi?: PoiMark | null
 }
+
+// Kinds drawn with a model (GLB or procedural); others (landmarks, cataclysms, hand-edited
+// POIs) and any POI on open water keep the yellow gem.
+export function poiHasModel(tile: SceneryTile): boolean {
+  return Boolean(tile.poi) && tile.poi!.kind !== 'none' && tile.type !== TILE_TYPE.WATER
+}
+
+// Spots on a tile where a model can stand clear of its road, river or water, as (x, z) offsets
+// from the hex center, best first. A plain tile offers its center, then a ring; otherwise spots
+// toward its grass edges and the corners between two grass edges.
+export function poiSlots(tile: SceneryTile): { x: number; z: number }[] {
+  const def = TILE_LIST[tile.type]
+  const edges = rotateHexEdges(def.edges, tile.rotation)
+  const grass = HEX_DIRS.map((d) => edges[d] === 'grass')
+  const at = (deg: number, r: number) => ({ x: Math.cos((deg * Math.PI) / 180) * r, z: Math.sin((deg * Math.PI) / 180) * r })
+  if (grass.every(Boolean)) {
+    return [{ x: 0, z: 0 }, ...HEX_DIRS.map((d) => at(DIR_ANGLE[d], 0.62)), ...HEX_DIRS.map((d) => at(DIR_ANGLE[d] + 30, 0.72))]
+  }
+  const out: { x: number; z: number }[] = []
+  HEX_DIRS.forEach((d, i) => {
+    if (grass[i] && grass[(i + 1) % 6]) out.push(at(DIR_ANGLE[d] + 30, 0.66))
+  })
+  HEX_DIRS.forEach((d, i) => {
+    if (grass[i]) out.push(at(DIR_ANGLE[d], 0.62))
+  })
+  return out.length ? out : [{ x: 0, z: 0 }]
+}
+
+// What buildings a settlement shows, by type (smaller buildings as the town grows).
+const SETTLEMENT_LAYOUT: Record<string, { meshes: string[]; scale: number }> = {
+  Village: { meshes: ['home', 'home', BUILDING_MESHES.well], scale: 0.5 },
+  Town: { meshes: ['home', 'home', 'home', BUILDING_MESHES.church, BUILDING_MESHES.market], scale: 0.46 },
+  City: { meshes: [BUILDING_MESHES.townhall, BUILDING_MESHES.church, BUILDING_MESHES.market, BUILDING_MESHES.tower, 'home', 'home'], scale: 0.42 },
+  Metropolis: {
+    meshes: [BUILDING_MESHES.townhall, BUILDING_MESHES.church, BUILDING_MESHES.market, BUILDING_MESHES.tower, BUILDING_MESHES.blacksmith, 'home', 'home', 'home'],
+    scale: 0.38,
+  },
+}
+
+// The models for a hex's point of interest (camps and rifts excluded: MapScene builds those at
+// poiSlots(tile)[0]).
+export function planPoiModels(tile: SceneryTile, worldSeed: number): Decoration[] {
+  if (!poiHasModel(tile)) return []
+  const rng = mulberry32(mixSeed(worldSeed, tile.q, tile.r, 0x9013))
+  const def = TILE_LIST[tile.type]
+  const { x, z } = hexWorldPosition(tile.q, tile.r)
+  const y = tileBaseY(tile.level) + SURFACE_HEIGHT + (def.levelIncrement ?? 0) * 0.25
+  const slots = poiSlots(tile)
+  const out: Decoration[] = []
+  const turn = () => Math.floor(rng() * 6) * (Math.PI / 3)
+  const place = (mesh: string, slot: { x: number; z: number }, scale: number, rotY = turn()) =>
+    out.push({ hexId: tile.id, mesh, x: x + slot.x, y, z: z + slot.z, rotY, scale, level: tile.level })
+
+  const kind = tile.poi!.kind
+  if (kind === 'settlement') {
+    const layout = SETTLEMENT_LAYOUT[tile.poi!.settlementType ?? 'Village'] ?? SETTLEMENT_LAYOUT.Village
+    layout.meshes.forEach((m, i) => {
+      const slot = slots[i % slots.length]
+      const mesh = m === 'home' ? BUILDING_MESHES.homes[Math.floor(rng() * 2)] : m
+      const rotY = turn()
+      place(mesh, slot, layout.scale, rotY)
+      if (mesh === BUILDING_MESHES.tower) place(BUILDING_MESHES.towerTop, slot, layout.scale, rotY)
+    })
+  } else if (kind === 'tower') {
+    const rotY = turn()
+    place(BUILDING_MESHES.tower, slots[0], 0.75, rotY)
+    place(BUILDING_MESHES.towerTop, slots[0], 0.75, rotY)
+  } else if (kind === 'keep') {
+    place(SITE_MESHES.keep, slots[0], 0.5)
+  } else if (kind === 'dungeon') {
+    place(SITE_MESHES.dungeon, slots[0], 0.7)
+  } else if (kind === 'shrine') {
+    place(SITE_MESHES.shrine, slots[0], 0.7)
+  }
+  return out
+}
+
+
 
 // Unit vector (x, z) from a hex's center toward the middle of the edge facing `dir`.
 const DIR_ANGLE: Record<HexDir, number> = { NE: -60, E: 0, SE: 60, SW: 120, W: 180, NW: 240 }
@@ -113,6 +222,8 @@ export function planScenery(tile: SceneryTile, worldSeed: number, tuning = SCENE
     add(mesh, 0, base, 0, rotationAngle(tile.rotation))
     return out
   }
+  // A point of interest's models take the hex instead of its usual scenery.
+  if (poiHasModel(tile)) return out
 
   if (tile.type === TILE_TYPE.GRASS) {
     if (t === 'Forest/jungle') {

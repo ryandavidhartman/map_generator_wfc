@@ -3,7 +3,8 @@
 // After each chunk solve, breakRiverLoops finds any river cycle and re-solves a small patch on
 // it with river tiles banned in one cell, so WFC reroutes or ends the river there. Run after
 // every chunk, this keeps the whole map loop-free: any new cycle must pass through the new
-// chunk, whose cells are never locked.
+// chunk, whose cells are never locked. The patch goes on a loop cell in the new chunk when the
+// cycle's closing edge is elsewhere, so it stays inside the tiles the worker knows (M6).
 
 import type { Rng } from '../engine/dice'
 import { CUBE_DIRS, cubeCoordsInRadius, cubeKey, keyOf, parseCubeKey } from '../wfc/cube'
@@ -59,6 +60,26 @@ export function findRiverLoops(store: TileStore, startKeys: Iterable<string>): [
   })
 }
 
+// The cells of the loop that the edge a-b closes: the river path from a to b that doesn't use
+// that edge, a and b included.
+export function loopCells(store: TileStore, a: string, b: string): string[] {
+  const prev = new Map<string, string | null>([[a, null]])
+  const queue = [a]
+  while (queue.length) {
+    const k = queue.shift()!
+    if (k === b) break
+    for (const n of riverLinks(store, k)) {
+      if (prev.has(n) || (k === a && n === b)) continue
+      prev.set(n, k)
+      queue.push(n)
+    }
+  }
+  if (!prev.has(b)) return [a, b]
+  const path: string[] = []
+  for (let k: string | null = b; k !== null; k = prev.get(k) ?? null) path.push(k)
+  return path
+}
+
 export type BreakLoopsOptions = {
   rng: Rng
   rules: AdjacencyRules
@@ -66,6 +87,11 @@ export type BreakLoopsOptions = {
   isLocked: (key: string) => boolean
   patchRadius?: number
   maxIterations?: number
+  // Where a patch may be centered. The worker only knows the tiles near the chunk (its
+  // context); a patch near the context's edge can't see its outer neighbors and would be solved
+  // against nothing there, leaving mismatched edges with the real tiles (found in M6's growth
+  // test). Default: anywhere.
+  canBreakAt?: (key: string) => boolean
 }
 
 const noRiverMasks = new WeakMap<AdjacencyRules, Uint32Array>()
@@ -97,7 +123,12 @@ export function breakRiverLoops(
     if (loops.length === 0) break
     const [a, b] = loops[0]
     // Break at an end of the closing edge, preferring one in the new chunk.
-    const target = [a, b].find((k) => cellKeys.has(k) && !isLocked(k)) ?? [a, b].find((k) => !isLocked(k))
+    // Break at a cell on the loop, preferring one in the new chunk (every new loop passes
+    // through it), then the closing edge's own ends.
+    const canBreakAt = options.canBreakAt ?? (() => true)
+    const ok = (k: string) => !isLocked(k) && canBreakAt(k)
+    const onLoop = loopCells(store, a, b)
+    const target = [a, b].find((k) => cellKeys.has(k) && ok(k)) ?? onLoop.find((k) => cellKeys.has(k) && ok(k)) ?? onLoop.find(ok)
     if (!target) {
       given.add(`${a}|${b}`)
       continue

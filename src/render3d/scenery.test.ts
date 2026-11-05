@@ -3,7 +3,12 @@ import type { Terrain } from '../data/tables'
 import { TILE_TYPE } from '../wfc/tiles'
 import { hexWorldPosition, rotationAngle } from './layout'
 import {
+  BUILDING_MESHES,
   BRIDGE_MESHES,
+  planPoiModels,
+  poiHasModel,
+  poiSlots,
+  SITE_MESHES,
   HILL_MESHES,
   LILY_MESHES,
   MOUNTAIN_MESHES,
@@ -101,5 +106,57 @@ describe('planScenery', () => {
     const hills = across({ terrain: 'Grassland', type: TILE_TYPE.RIVER_END, lake: false })
     expect(hills.length).toBeGreaterThan(100)
     for (const h of hills) expect(HILL_MESHES).toContain(h.mesh)
+  })
+})
+
+describe('point-of-interest models (M6)', () => {
+  const settlement = (type: string, over: Partial<SceneryTile> = {}) => tile({ poi: { kind: 'settlement', settlementType: type }, ...over })
+
+  it('draws settlements bigger as they grow, with a tower top on every tower', () => {
+    const counts = ['Village', 'Town', 'City', 'Metropolis'].map((t) => planPoiModels(settlement(t), 1))
+    expect(counts.map((c) => c.filter((d) => d.mesh !== BUILDING_MESHES.towerTop).length)).toEqual([3, 5, 6, 8])
+    for (const c of counts) {
+      expect(c.filter((d) => d.mesh === BUILDING_MESHES.tower).length).toBe(c.filter((d) => d.mesh === BUILDING_MESHES.towerTop).length)
+    }
+    expect(counts[0].map((d) => d.mesh)).toContain(BUILDING_MESHES.well)
+  })
+
+  it('gives each site kind its model, and none to camps and rifts (built separately)', () => {
+    const mesh = (kind: 'tower' | 'keep' | 'dungeon' | 'shrine' | 'camp' | 'rift') => planPoiModels(tile({ poi: { kind } }), 1).map((d) => d.mesh)
+    expect(mesh('tower')).toEqual([BUILDING_MESHES.tower, BUILDING_MESHES.towerTop])
+    expect(mesh('keep')).toEqual([SITE_MESHES.keep])
+    expect(mesh('dungeon')).toEqual([SITE_MESHES.dungeon])
+    expect(mesh('shrine')).toEqual([SITE_MESHES.shrine])
+    expect(mesh('camp')).toEqual([])
+    expect(mesh('rift')).toEqual([])
+  })
+
+  it('keeps the gem for landmarks, hand-edited POIs and anything on open water', () => {
+    expect(poiHasModel(tile({ poi: { kind: 'none' } }))).toBe(false)
+    expect(poiHasModel(tile({ poi: { kind: 'settlement' }, type: TILE_TYPE.WATER, terrain: 'Ocean' }))).toBe(false)
+    expect(poiHasModel(tile({ poi: null }))).toBe(false)
+  })
+
+  it('replaces the hex\'s usual scenery, but keeps a bridge', () => {
+    expect(planScenery(settlement('Town', { terrain: 'Forest/jungle' }), 1)).toEqual([])
+    const crossing = settlement('Village', { type: TILE_TYPE.RIVER_CROSSING_A })
+    expect(planScenery(crossing, 1).map((d) => d.mesh)).toEqual([BRIDGE_MESHES.A])
+  })
+
+  it('stands buildings clear of the road: a road end leading west gets no spot toward the west', () => {
+    // ROAD_END unrotated: the road runs from the W edge to the center.
+    const slots = poiSlots(tile({ type: TILE_TYPE.ROAD_END }))
+    expect(slots.length).toBeGreaterThan(5)
+    for (const s of slots) {
+      expect(Math.hypot(s.x, s.z)).toBeGreaterThan(0.5) // never the center, where the road ends
+      const angle = (Math.atan2(s.z, s.x) * 180) / Math.PI
+      expect(Math.abs(Math.abs(angle) - 180)).toBeGreaterThan(20) // not toward W
+    }
+    // Rotated one step clockwise, the road leads NW instead.
+    for (const s of poiSlots(tile({ type: TILE_TYPE.ROAD_END, rotation: 1 }))) {
+      const angle = (Math.atan2(s.z, s.x) * 180) / Math.PI
+      expect(Math.abs(angle - -120)).toBeGreaterThan(20)
+    }
+    expect(poiSlots(tile())[0]).toEqual({ x: 0, z: 0 }) // a plain tile: the center first
   })
 })

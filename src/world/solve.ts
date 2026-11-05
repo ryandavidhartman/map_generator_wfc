@@ -3,8 +3,8 @@
 // loops through the chunk broken (see rivers.ts). The first chunk
 // needs no seeds; the masks already say where the sea is.
 
-import { chunkCells, solveChunk, type ChunkCoord } from '../wfc/chunks'
-import { keyOf } from '../wfc/cube'
+import { CHUNK_CONTEXT_RADIUS, chunkCells, chunkCenter, solveChunk, type ChunkCoord } from '../wfc/chunks'
+import { cubeDistance, keyOf, parseCubeKey } from '../wfc/cube'
 import { mixSeed, mulberry32 } from '../wfc/rng'
 import type { RegionSolveResult, TileStore } from '../wfc/recovery'
 import { AdjacencyRules } from '../wfc/rules'
@@ -21,6 +21,8 @@ export const LOOKAHEAD_RINGS = 2
 // River tiles are weighted up from hex-map-wfc's weights to bring rivers toward ~17% of land
 // (punch-list 1a). Measured in M2 (30 worlds): x1 gave 13.7%, x1.6 16.1%, x2.2 19.1% with drops returning.
 export const RIVER_WEIGHT = 1.6
+
+const LOOP_PATCH_RADIUS = 2 // breakRiverLoops' default patch radius
 
 const isRiverTile = (type: number) => HEX_DIRS.some((d) => TILE_LIST[type].edges[d] === 'river')
 
@@ -62,11 +64,15 @@ export function solveWorldChunk(
   })
   if (!result.ok) return { ...result, unbrokenRiverLoops: 0 }
 
+  // Break loops only where a patch (radius 2) and its fixed ring fit inside the tiles a worker
+  // request carries (CHUNK_CONTEXT_RADIUS around the chunk's center).
+  const center = chunkCenter(chunk)
   const loops = breakRiverLoops(store, new Set(chunkCells(chunk).map(keyOf)), {
     rng: mulberry32(mixSeed(fields.params.seed, chunk.i, chunk.j, 0x7140)),
     rules,
     maskFor,
     isLocked,
+    canBreakAt: (k) => cubeDistance(parseCubeKey(k), center) <= CHUNK_CONTEXT_RADIUS - LOOP_PATCH_RADIUS - 1,
   })
   const updates = new Map(result.updates.map((t) => [keyOf(t), t]))
   for (const t of loops.updates) updates.set(keyOf(t), t)

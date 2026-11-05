@@ -52,7 +52,7 @@ import { TILE_LIST } from '../wfc/tiles'
 import type { SavedTiles } from '../world/hexTiles'
 import { hexWorldPosition, instanceColor, isSeaTile, rotationAngle, TINT, tileBaseY, type TileDraw } from './layout'
 import { PostFX } from './postFX'
-import { ALL_DECORATION_MESHES, MOUNTAIN_MESHES, planScenery } from './scenery'
+import { ALL_DECORATION_MESHES, KEEP_Y_MESHES, MOUNTAIN_MESHES, planPoiModels, planScenery, poiHasModel, poiSlots } from './scenery'
 import { createTileMaterial, RENDER_MODE, type TileMaterial } from './tileMaterial'
 import { Water } from './water'
 import { maskBounds, WavesMask } from './wavesMask'
@@ -140,7 +140,8 @@ function loadTileAssets(assetBase: string): Promise<TileAssets> {
       }
       const out = g.clone()
       out.computeBoundingBox()
-      out.translate(0, -out.boundingBox!.min.y - (MOUNTAIN_MESHES.includes(name) ? 0.5 : 0), 0)
+      // Buildings keep their modeled origin height (hex-map-wfc keepYMeshes).
+      if (!KEEP_Y_MESHES.has(name)) out.translate(0, -out.boundingBox!.min.y - (MOUNTAIN_MESHES.includes(name) ? 0.5 : 0), 0)
       out.computeBoundingBox()
       out.computeBoundingSphere()
       decorations.set(name, out)
@@ -177,6 +178,8 @@ export class MapScene {
   private resizeObserver: ResizeObserver | null = null
   private disposed = false
   private worldSeed = 0
+  private poiSignature = ''
+  private readonly poiGroup = new Group() // procedural camp and rift models
   private drops = new Map<string, number>() // hex id -> when its drop starts (ms)
   private bases = new Map<string, { x: number; y: number; z: number; rotY: number }>() // resting tile placement
   private maskFrames = 0 // frames until the coast masks are redrawn (0: not pending)
@@ -212,7 +215,7 @@ export class MapScene {
 
     this.scene.background = new Color(BACKGROUND)
     this.scene.environmentIntensity = ENV_INTENSITY
-    this.scene.add(this.markers)
+    this.scene.add(this.markers, this.poiGroup)
 
     const light = new DirectionalLight(0xffffff, DIR_LIGHT_INTENSITY)
     light.castShadow = true
@@ -355,6 +358,7 @@ export class MapScene {
     this.tileMesh = mesh
     this.scene.add(mesh)
     this.buildDecorations(draws)
+    this.buildPoiModels(draws)
     this.applyLooks()
     // The coast masks are drawn a few frames later: drawing the tiles before the scene has
     // rendered once (while their shaders are still being prepared) leaves the masks empty.
@@ -365,6 +369,12 @@ export class MapScene {
   // Update how each tile looks (revealed, fog, GM view) and the markers.
   setView(draws: TileDraw[], markers: MarkerView): void {
     for (const d of draws) this.draws.set(d.id, d)
+    // A newly revealed point of interest brings its models.
+    if (poiSignature(draws) !== this.poiSignature) {
+      this.buildDecorations(draws)
+      this.buildPoiModels(draws)
+      this.refreshMaskLayers()
+    }
     this.applyLooks()
     this.buildMarkers(markers)
     this.dirty = true
@@ -428,6 +438,27 @@ export class MapScene {
     }
   }
 
+  // Camps and rifts: no model in the tile pack, so they're built here from simple shapes.
+  private buildPoiModels(draws: TileDraw[]): void {
+    for (const child of [...this.poiGroup.children]) {
+      this.poiGroup.remove(child)
+      child.traverse((o) => {
+        const m = o as Mesh
+        m.geometry?.dispose()
+        ;(m.material as Material | undefined)?.dispose()
+      })
+    }
+    for (const d of draws) {
+      if (!poiHasModel(d) || (d.poi!.kind !== 'camp' && d.poi!.kind !== 'rift')) continue
+      const slot = poiSlots(d)[0]
+      const p = hexWorldPosition(d.q, d.r)
+      const model = d.poi!.kind === 'camp' ? campModel() : riftModel()
+      model.position.set(p.x + slot.x, tileBaseY(d.level) + 1 + (TILE_LIST[d.type].levelIncrement ?? 0) * 0.25, p.z + slot.z)
+      model.rotation.y = ((d.q * 7 + d.r * 13) % 6) * (Math.PI / 3)
+      this.poiGroup.add(model)
+    }
+  }
+
   private buildDecorations(draws: TileDraw[]): void {
     if (!this.assets) return
     if (this.decoMesh) {
@@ -436,7 +467,8 @@ export class MapScene {
       this.decoMesh = null
     }
     this.decoInstances.clear()
-    const plans = draws.flatMap((d) => planScenery(d, this.worldSeed))
+    const plans = draws.flatMap((d) => [...planScenery(d, this.worldSeed), ...planPoiModels(d, this.worldSeed)])
+    this.poiSignature = poiSignature(draws)
     if (plans.length === 0) return
     const geoms = this.assets.decorations
     let vertices = 0
@@ -519,7 +551,14 @@ export class MapScene {
     assets.tileMaterial.setRenderMode(RENDER_MODE.trueColor)
     wavesMask.render(this.scene, [tileMesh], water.mesh, bounds, this.tilesForMask)
     assets.tileMaterial.setRenderMode(RENDER_MODE.normal)
-    postFX.setLayers({ waterMask: [tileMesh, ...(this.decoMesh ? [this.decoMesh] : [])] })
+    this.refreshMaskLayers()
+  }
+
+  // The water mask is drawn from the current tile and decoration meshes (rebuilt on growth and
+  // on a newly revealed point of interest).
+  private refreshMaskLayers(): void {
+    if (!this.tileMesh || !this.postFX) return
+    this.postFX.setLayers({ waterMask: [this.tileMesh, ...(this.decoMesh ? [this.decoMesh] : [])] })
   }
 
   private surfaceAt(hexId: string): Vector3 {
@@ -576,6 +615,8 @@ export class MapScene {
     }
 
     for (const hexId of view.poiHexIds) {
+      const d = this.draws.get(hexId)
+      if (d && poiHasModel(d)) continue // drawn as a model instead (scenery.ts, buildPoiModels)
       const gem = new Mesh(new OctahedronGeometry(0.35), new MeshStandardMaterial({ color: 0xffd54a, emissive: 0x6b5200 }))
       // Above the pawn when the party stands on it.
       gem.position.copy(this.surfaceAt(hexId)).add(new Vector3(0, hexId === view.partyHexId ? 1.75 : 1.2, 0))
@@ -722,4 +763,64 @@ export class MapScene {
     const id = this.pick(e.clientX, e.clientY)
     if (id) this.callbacks.onDoubleClick(id)
   }
+}
+
+// Which hexes have which points of interest: when this changes, the POI models are rebuilt.
+function poiSignature(draws: TileDraw[]): string {
+  return draws
+    .filter((d) => d.poi)
+    .map((d) => `${d.id}:${d.poi!.kind}:${d.poi!.settlementType ?? ''}`)
+    .join('|')
+}
+
+// A camp: two canvas tents and a campfire.
+function campModel(): Group {
+  const g = new Group()
+  const canvas = new MeshStandardMaterial({ color: 0xd9c9a3, roughness: 0.9 })
+  for (const [x, z, s] of [
+    [-0.28, -0.12, 1],
+    [0.22, -0.26, 0.85],
+  ] as const) {
+    const tent = new Mesh(new ConeGeometry(0.26 * s, 0.38 * s, 4), canvas)
+    tent.position.set(x, 0.19 * s, z)
+    tent.rotation.y = Math.PI / 4 + x
+    tent.castShadow = true
+    g.add(tent)
+  }
+  const wood = new MeshStandardMaterial({ color: 0x5b3a1e, roughness: 1 })
+  for (let i = 0; i < 3; i++) {
+    const log = new Mesh(new CylinderGeometry(0.025, 0.025, 0.22, 6), wood)
+    log.rotation.set(Math.PI / 2, (i * Math.PI) / 3, 0)
+    log.position.set(0.05, 0.03, 0.2)
+    g.add(log)
+  }
+  const fire = new Mesh(new ConeGeometry(0.07, 0.18, 6), new MeshStandardMaterial({ color: 0xff8a1f, emissive: 0xff5a00, emissiveIntensity: 2 }))
+  fire.position.set(0.05, 0.11, 0.2)
+  g.add(fire)
+  return g
+}
+
+// A rift: a dark scar in the ground with glowing violet shards breaking out of it.
+function riftModel(): Group {
+  const g = new Group()
+  const scar = new Mesh(new CylinderGeometry(0.42, 0.42, 0.02, 7), new MeshStandardMaterial({ color: 0x140a1f, roughness: 1 }))
+  scar.position.y = 0.01
+  scar.scale.set(1, 1, 0.55)
+  g.add(scar)
+  const crystal = new MeshStandardMaterial({ color: 0x9d5cff, emissive: 0x6a1fd1, emissiveIntensity: 1.6, roughness: 0.3 })
+  const shards: [number, number, number, number, number][] = [
+    [0, 0, 0.55, 0, 0],
+    [0.16, 0.05, 0.38, 0.35, 0.2],
+    [-0.15, -0.04, 0.42, -0.3, -0.15],
+    [0.05, -0.1, 0.28, 0.15, -0.4],
+  ]
+  for (const [x, z, h, tiltX, tiltZ] of shards) {
+    const shard = new Mesh(new OctahedronGeometry(0.09), crystal)
+    shard.scale.set(1, h / 0.09 / 2, 1)
+    shard.position.set(x, h / 2, z)
+    shard.rotation.set(tiltX, 0, tiltZ)
+    shard.castShadow = true
+    g.add(shard)
+  }
+  return g
 }
