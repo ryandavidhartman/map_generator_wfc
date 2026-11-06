@@ -57,6 +57,25 @@ Code comments citing "punch-list 1a" mean that old punch list.
   `BIOME_TUNING` (terrain.ts) and `RIVER_WEIGHT` / `LOOKAHEAD_RINGS` (world/solve.ts). Any
   tuning change must keep "0 failed, 0 dropped cells". Changing tuning alters how unsolved
   parts of existing worlds come out, but never solved hexes.
+- **Town-map checks:** `npm run town-maps -- [--type Town] [--seed 7] [--rotation 0]
+  [--tiles RIVER_B,COAST_A] [--png]` (scripts/townMaps.ts) renders the real `SettlementMapSvg`
+  for no water, an Ocean hex and every water tile in `TILE_LIST`, the same town in each, into
+  `node_modules/.tmp/town-maps/town-maps.html`; `--png` screenshots it to `town-maps.png`.
+  Look at the PNG (and show it to the user) after any settlement-map change; the user approves
+  visual changes from screenshots.
+- **Headless Chromium:** there's no playwright package, but Playwright's browser cache has the
+  binaries, e.g. `~/.cache/ms-playwright/chromium_headless_shell-*/chrome-headless-shell-linux64/chrome-headless-shell`
+  (`npx playwright install chromium-headless-shell` if it's missing; the town-maps script
+  also takes `CHROME=<path>`).
+  - A static page or SVG: `chrome-headless-shell --no-sandbox --disable-gpu --hide-scrollbars
+    --window-size=W,H --screenshot=out.png file:///abs/path.html`.
+  - The running app, or anything async (the WFC worker): launch with
+    `--remote-debugging-port=9333` and drive it from a Node script over the DevTools protocol,
+    run with `node --experimental-websocket` (Node 20.16 has no global WebSocket otherwise).
+    Open a tab with `PUT /json/new?<url>` and wait on `Runtime.evaluate` with
+    `awaitPromise: true`. `--dump-dom` won't do: it dumps at page load.
+  - A one-off page: `vite build --config <plain-object .mjs config>` (a config outside the
+    repo can't `import 'vite'`), serve it with `vite preview`, and delete the temp files after.
 - **3D browser checks:**
   - Headless Chromium has no WebGPU: launch it with
     `--use-angle=swiftshader --enable-unsafe-swiftshader` (the WebGL2 fallback).
@@ -71,5 +90,19 @@ Code comments citing "punch-list 1a" mean that old punch list.
   start from a reference image; drawing derives from saved data; don't name any other game,
   publisher or rulebook, except where a license requires attribution (Basic Fantasy).
 - Don't commit unless asked.
+
+## Working with the user
+
+- One punch-list item at a time: plan it, ask the questions only the user can answer, build
+  it, then stop and report (with screenshots for anything visual) before starting the next.
+  The user approves each commit, push and PR explicitly.
+- Explain jargon in plain words before asking the user to choose between options (WFC terms
+  such as cell, tile and chunk, in particular).
+- Only write "user decided" (or "user, <date>") in docs and comments for something the user
+  actually said. Things Claude noticed or proposed, and questions the user hasn't answered,
+  are labeled as such.
+- When an item finishes, update PLAN.md (the punch list and the sections it changes),
+  HISTORY.md (what was done and measured), ARCHITECTURE-CHECKLIST.md (any claim it touches)
+  and this file, in the same branch.
 - Node 20.16 and Vite 6.4 (not 7 or 8). Run `source ~/.nvm/nvm.sh && nvm use` before npm.
   See the "Stack" section of `docs/reference/map_generator-CLAUDE.md`.

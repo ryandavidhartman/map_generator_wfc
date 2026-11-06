@@ -49,7 +49,7 @@ dropped cells". Travel rates on roads are out of scope for now (user, 2026-11-05
 
 **2. Town-map water from tile shapes.** The town map used to draw one straight river or one
 coast. A layout change that keeps the current look: no reference image, the user checks
-screenshots. The rivers were done and approved by the user on 2026-11-06 (branch `town-map-rivers`) by porting
+screenshots (`npm run town-maps -- --png` renders every water tile; see CLAUDE.md). The rivers were done and approved by the user on 2026-11-06 (branch `town-map-rivers`) by porting
 map_generator's river code from its PR #1 (its punch-list 1b): `riverCourse.ts` and the
 curved block cutting in settlementPlan.ts (section 5). Coast-only and no-water towns came
 out unchanged (`settlementPlanBaseline.test.ts`).
@@ -63,10 +63,27 @@ out unchanged (`settlementPlanBaseline.test.ts`).
 | River mouth (RIVER_INTO_COAST) | Coast and river together (today the river is lost) | Open |
 | Lake on a plain grass hex | A lakeshore on one side, reusing the coast drawing, side from the seed | Open |
 
-Also open: the /poi review page has no map hex, so its Ocean and Coast settlements get a
-random water side; give it a way to pick a tile shape, so every water case can be reviewed
-there. The map_generator PR's `poiReviewRiver.ts` does this for its own river model and can be
-adapted. Later: a true island drawing for towns on Ocean hexes.
+Also open: **a water picker on the /poi review page**, so every water case can be reviewed
+there. Today `PoiReviewPage.tsx` builds a lone hex with no world or tiles, so `SettlementView`
+falls back to `waterForMapHex`: Ocean and Coast settlements get a random side, and no other
+terrain ever gets water. The spec:
+
+- A "Water" select beside the Terrain select: "From terrain (no tile)" (today's behavior, the
+  default), then one entry per water tile in `TILE_LIST` (the river tiles, RIVER_END,
+  RIVER_INTO_COAST and the coast tiles), plus "Lake (plain grass hex)" once lakes are drawn.
+- A rotation select (0-5, or "random", which re-picks on each Reroll POI).
+- The chosen tile's edges come from its `TILE_LIST` definition turned by `rotateHexEdges`
+  (wfc/tiles.ts), sorted into sea, coast and river edges the way `deriveHexGeo` does
+  (world/terrain.ts), and go through the same `waterForEdges` call the real map uses, so the
+  page shows exactly what a hex with that tile would.
+- Plumbing: `SettlementView` reads its water from the map state (`geoAt`). Pass the review
+  hex's edges in without faking a world: for example an optional water-edges override on the
+  review map state, read by `SettlementView` before `geoAt`. Keep it out of saves.
+- Label the drawn map with the tile name and rotation, so a screenshot says what it shows.
+
+(map_generator solved the same problem for its own river model with a per-reroll random river
+case, in its `src/routes/poiReviewRiver.ts`; that file isn't in this repo and isn't needed.)
+Later: a true island drawing for towns on Ocean hexes.
 
 **3. GM editing of unrevealed hexes.** GM editing (section 6) covers revealed hexes only, from
 the hex page's Edit form. This adds editing hexes ahead of the party from the GM view. To
