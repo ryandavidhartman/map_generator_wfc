@@ -26,6 +26,7 @@ Written 2026-11-04. All numbers are starting points to tune by simulation.
 | Danger | **The reveal-time rule stays.** A hex's `dangerLevel` is computed when it's revealed, from its revealed neighbors, exactly as today. |
 | GM editing | **Edit plus local re-solve.** The GM pins a hex, and WFC re-solves the *unrevealed* hexes within about 2 to fit it. Revealed hexes never change. |
 | Saving | **localStorage: world seed, solved tiles, and per-hex game data.** Mongo stays a later item. |
+| Hex scale | **6 miles per hex** (decided 2026-11-05). A 217-hex chunk is about 100 miles across. A future regional overview map would use 24 miles per hex (4 hexes across). |
 
 ## Glossary
 
@@ -43,6 +44,9 @@ Written 2026-11-04. All numbers are starting points to tune by simulation.
 
 ## How it works
 
+This section describes the system as built (M0-M8). The milestone entries below record
+how it got there and what was measured.
+
 ### 1. World generation (WFC)
 
 - Campaign start: the GM picks a seed (or Random) and a starting terrain. `placeWorld` puts
@@ -51,13 +55,16 @@ Written 2026-11-04. All numbers are starting points to tune by simulation.
   chunk 0 whose derived terrain matches, so it isn't always (0, 0); if chunk 0 has none, a new
   seed is tried (`src/world/startWorld.ts`, built in M3).
 - Tiles come from hex-map-wfc's 34 active tile types × 6 rotations × up to 5 levels (about
-  900 states), with its edge rules and weights (river tiles ×1.6, section 2). Roads come free.
+  900 states), with its edge rules and weights (river tiles ×1.6, section 2). Roads are part of
+  the same tiles, not a separate pass.
 - The solve runs in a Web Worker (`src/world/solver.worker.ts`), with hex-map-wfc's
   backtracking and recovery (unfixing, then Local-WFC, then dropping cells), steered by the
   world's masks (section 2).
 - **Change from hex-map-wfc:** recovery may only unfix or re-solve *unrevealed* hexes. A
-  revealed hex is always a fixed constraint. If a chunk can't be solved without touching a
-  revealed hex, the mountain fallback is used at the boundary instead.
+  revealed hex is always a fixed constraint (`isLocked`). If a chunk can't be solved without
+  touching a revealed hex, recovery's last resort drops a cell: it keeps the cell's tile and
+  accepts an edge that doesn't match. Growing chunks early (section 4) makes this rare: one
+  drop in 360 measured chunk solves.
 
 ### 2. Terrain from tile and noise (built in M2)
 
@@ -101,18 +108,19 @@ of the tile and the fields at its hex, so it's worked out when needed, not saved
   river tiles banned in one cell. Measured result: 0.1 loops per world.
 - **Rivers and roads are features, not terrain.** `deriveHexGeo` also gives each hex's river,
   road and sea edges, read from its tile and rotation. This is the real edge data the town map
-  needs (map_generator punch-list items 1b and 1c).
+  needs (punch-list item 2).
 - **Lakes** are a feature: half of inland river ends, and 9.5% of hexes with only grass edges,
   picked by a hash of the seed and hex (stable, no noise needed). hex-map-wfc has no lake tile.
 - **Terrain changes done:** River/coast is renamed Coast, and Hills is added, with all its
   existing content wired into the seven terrain-keyed tables. `ALL_TERRAINS` (8 terrains) drives
   the pickers and legend. M3 retired the old 2d6 reveal rules (`TERRAIN_ORDER`, the Hex Terrain
-  and New Hex tables); the start dialog's Random button rolls 1a's 3d6 table (`terrainFor3d6`).
+  and New Hex tables); the start dialog's Random button rolls map_generator 1a's 3d6 table
+  (`terrainFor3d6`).
 
 **Measured** with `npm run sim -- --seeds 40` (40 worlds of 19 chunks, about 4,100 hexes each;
 0 failed solves, 0 dropped cells, about 73 ms per chunk):
 
-| | Mean [min-max] | Target (punch-list 1a) |
+| | Mean [min-max] | Target (map_generator's 1a) |
 |---|---|---|
 | Coast | 15.8% [7.4-29.3] | 18.0% (set by WFC's coastline, not directly tunable) |
 | Swamp | 7.6% [3.6-13.8] | 8.0% |
@@ -125,7 +133,7 @@ of the tile and the fields at its hex, so it's worked out when needed, not saved
 | rivers / land | 15.5% [9.1-25.3] | ~17% |
 | lakes / land | 5.2% [4.0-6.1] | ~5% |
 | one-hex ponds / inland water bodies | 1.3% | ≤ 5% |
-| roads / land | 23.8% | (none; see open question 3) |
+| roads / land | 23.8% | ~10% (user, 2026-11-05; punch-list item 1) |
 
 Terrain shares are of land (everything but Ocean); open water is about 32% of the map. The
 spread between worlds is wide by design: some are wetter, colder or more mountainous.
@@ -168,43 +176,51 @@ spread between worlds is wide by design: some are wetter, colder or more mountai
 ### 5. Points of interest
 
 - On reveal, the 1-in-6 gate and the d200 Feature table run exactly as today, verbatim.
-- **Settlement anchors:** at chunk-solve time, hexes at road ends or road junctions, and coast
-  or river hexes with a road, are flagged as settlement anchors. hex-map-wfc already places
-  buildings this way. When an anchor hex is revealed, it gets a Settlement POI and its type
-  roll runs as normal. Other hexes roll as today. (Tune the anchor rate so settlements aren't
-  far more common than the d200 table gives.)
-- 3D markers: settlements use KayKit building decorations. Dungeon, tower, keep, camp, shrine
-  and rift POIs get marker models, and the 2D view uses icons.
-- The site generators are unchanged. Their water input (`waterForHex`) now reads the hex's
-  real coast and river edges from its tile instead of guessing from neighbors.
+- **Settlement anchors** (`src/world/anchors.ts`): a hex whose tile is a road end, a road
+  junction (3+ roads) or a river crossing is an anchor, about 6.4% of land hexes. It's read
+  from the tile when the hex is revealed, so nothing is saved. An anchor hex becomes a
+  settlement, its type re-rolled on the d200 until it lands on a settlement row; other hexes
+  roll as today. Anchors add to the d200's settlements (user, M6). Coast tiles never carry
+  roads, so there are no coast anchors.
+- 3D markers: settlements use KayKit buildings sized by type; tower, keep, dungeon and shrine
+  POIs get KayKit models, and camps and rifts simple built models. The 2D view uses a glyph
+  per kind.
+- The site generators are unchanged except the settlement's water: `waterForEdges` reads the
+  hex's real coast and river edges from its tile. `waterForHex`, the old guess from revealed
+  neighbors, is used only when a hex has no tile.
 
 ### 6. GM editing
 
-- Edit Hex keeps today's terrain, danger and POI fields. Changing the terrain pins a tile class
-  (e.g. Ocean → `WATER`; Mountain → a level-4 tile).
+- Edit Hex keeps today's terrain, danger and POI fields, for revealed hexes. Changing the
+  terrain to another shape class (Ocean, Coast, Hills, Mountain or flat land) pins the hex's
+  tile to that class; a change between flat-land biomes is a label only (`src/world/pin.ts`).
 - After a pin, WFC re-solves the unrevealed hexes within radius 2 (hex-map-wfc's Rebuild-WFC),
-  with revealed hexes as fixed constraints. If no fit exists, the edit still applies as a
-  label override, and the hex is flagged "tile mismatch" in GM view.
+  widening to 3 and then 4 if nothing fits, with revealed hexes as fixed constraints. If the
+  shape still can't fit, the closest one that does is used (Ocean → shore, Mountain → Hills,
+  flat land → shore or Hills). Either way the GM's terrain applies as a label, and a hex whose
+  tile doesn't match it is flagged "tile mismatch" in GM view.
 - No river or lake controls in v1, as in map_generator's 1a plan.
 
 ### 7. Saving
 
 - One localStorage document, as today:
-  `{ version, worldSeed, chunks: [chunkKey], tiles: { hexId: [type, rotation, level] }, hexes: { hexId: Hex }, partyHexId, selectedHexId }`.
+  `{ version, world: { seed, offsetX, offsetY }, chunks: [chunkKey], tiles: { hexId: [type, rotation, level] }, hexes: { hexId: Hex }, partyHexId, selectedHexId }`.
+  The Campaign menu also saves it to a JSON file and loads it back (M8).
 - Tiles are stored, not re-derived from the seed. Solves depend on the order chunks were
   grown, so replaying the seed alone isn't reliable.
-- Size check: 4,000 tiles at about 20 bytes is about 80 KB. Generated sites stay the bulk of
-  the save, as today.
-- Old map_generator saves aren't migrated (they're test data). A save with the wrong
-  `version` starts a new map.
+- Size: a 7-chunk campaign (1,519 tiles) saves as about 26 kB of the ~5 MB localStorage
+  allows. Generated sites stay the bulk of the save, as today.
+- Old saves aren't migrated (they're test data). A save with the wrong `version` starts a new
+  map, with a notice on the start screen.
 
 ## Architecture
 
 ```
 src/
-  data/        ← from map_generator, unchanged except Terrain (Coast rename, Hills)
-  engine/      ← from map_generator (sites, encounters, treasure…), unchanged
-  wfc/         ← ported from hex-map-wfc, TypeScript, no Three.js imports (built in M1)
+  data/        ← from map_generator: tables (Terrain gained Coast and Hills; 3d6 start table)
+  engine/      ← from map_generator: sites, encounters, treasure; anchor settlements in
+                 generateHex.ts, tile-edge water in settlementPlan.ts
+  wfc/         ← ported from hex-map-wfc, TypeScript, no Three.js imports (M1)
     tiles.ts          HexTileData: the 34 active tiles, edges, levels
     cube.ts           cube-coordinate helpers
     rules.ts          edge levels, bitset adjacency lookups, findMismatches
@@ -212,7 +228,7 @@ src/
     recovery.ts       solveRegion: Local-WFC and drop recovery, with isLocked
     chunks.ts         chunk lattice, solveChunk, first-chunk seeds
     rng.ts            Mulberry32, per-chunk seeds
-  world/       ← the bridge between tiles and game hexes (built in M2)
+  world/       ← the bridge between tiles and game hexes (M2 on)
     noise.ts          seeded simplex noise, fBm
     fields.ts         continent / elevation / moisture / temperature, placeWorld
     masks.ts          zones and per-cell allowed tiles
@@ -220,43 +236,55 @@ src/
     rivers.ts         river-loop detection and breaking
     terrain.ts        tile + fields → Terrain, river/road/sea edges, lakes (deriveHexGeo)
     stats.ts          measureWorld, growWorld (for tests and `npm run sim`)
-    protocol.ts       worker request/response (moved from wfc/ in M2)
+    protocol.ts       worker request/response
     solver.worker.ts  the Web Worker (just calls protocol.ts)
     client.ts         WfcClient: promise wrapper around the worker
     hexTiles.ts       saved tiles ([type, rotation, level] by hex id) <-> TileStore, geoAt (M3)
-    startWorld.ts     createStartingWorld: place, solve chunk 0, find the start hex, solve ring 1 (M3)
+    startWorld.ts     createStartingWorld: place, solve 7 chunks, find the start hex (M3)
     workerSolver.ts   the app's ChunkSolver, backed by one shared worker (M3)
-    (M5) growth trigger; (M6) anchors.ts, settlement anchors
-  render2d/    ← map_generator's HexGridSvg, reworked for tiles and pointy-top (built in M3)
+    growth.ts         chunksToGrow, lockedKeys, applyChunkResult (M5)
+    anchors.ts        settlement anchors (M6)
+    pin.ts            GM terrain edits: pin a tile, re-solve around it (M7)
+  render2d/    ← the overland 2D map, pointy-top (M3)
     HexGridSvg.tsx    pan/zoom map; player view or GM view
     HexTile.tsx       one hex: fill, coast water, lake, river, road, fog/dimming, markers
     tileShapes.ts     river/road/coast SVG paths from the tile's edges
-  render3d/    ← ported from hex-map-wfc: HexTiles, Decorations, Water, Lighting, PostFX
-    ThreeMapView.tsx  React wrapper (owns the canvas and renderer lifecycle)
-  hexgrid/     ← map_generator's site map renderers (Dungeon/Settlement/…), unchanged
-  state/       ← mapReducer + MapContext, extended with world/tiles
-  components/, routes/  ← from map_generator
+    mapData.ts        shared map geometry (hex size, per-hex geo, coordinates)
+    poiIcons.ts       POI glyphs (M6)
+    MapExportSvg.tsx, exportPng.tsx   player and GM PNG exports (M8)
+  render3d/    ← the overland 3D map, lazy-loaded (M4)
+    layout.ts         pure: placement, looks, instance-color encoding, tileDraws
+    scenery.ts        pure: decorations and POI models per hex
+    tileMaterial.ts   TSL tile material (palette blend, tints, fog, render modes)
+    MapScene.ts       renderer, camera, controls, meshes, markers, picking
+    water.ts, wavesMask.ts, postFX.ts   water, coastal waves, screen effects
+    ThreeMapView.tsx  React wrapper (owns the canvas and the scene's lifecycle)
+  hexgrid/     ← map_generator's site map renderers (Dungeon/Settlement/…), colors.ts, and
+                 hexMath.ts (switched to pointy-top in M3)
+  state/       ← mapReducer + MapContext, extended with world/tiles; useChunkGrowth (M5)
+  components/, routes/  ← from map_generator, plus the Campaign menu and start dialog (M8)
 ```
 
 - `wfc/` and `world/` are pure TypeScript and testable headless in Vitest. Only `render3d/`
-  imports Three.js.
-- `render3d/` is imperative Three.js code inside one React component. React passes in
-  `{ tiles, hexes, revealed, partyHexId, gmView }` and gets back click and double-click
-  events. The routes and actions are the same as the 2D view's.
+  imports Three.js, and only lazily.
+- `render3d/` is imperative Three.js code inside one React component. `ThreeMapView` takes
+  only `gmView`, reads the map state from context, and dispatches the same actions and routes
+  as the 2D view on click and double-click.
 - **Hex orientation:** map_generator is flat-top and hex-map-wfc tiles are pointy-top. We
   standardize on **pointy-top** (the 3D models are built that way). The 2D map is reworked to
   match. The site generators that take a direction (settlement water side) get a mapping from
   tile edges (NE, E, SE, SW, W, NW) to their own angles, covered by tests.
-- Routes: `/` (overland, 2D/3D toggle), `/hex/:hexId` (unchanged), and `/poi/:n` (unchanged).
-  It gets a fake tile so the water cases still vary.
+- Routes: `/` (overland, 2D/3D toggle), `/hex/:hexId` (unchanged), and `/poi/:n` (the POI
+  review page, unchanged). That page has no map hex, so an Ocean or Coast settlement there gets
+  a random water side (punch-list item 2).
 
 ## Milestones
 
 Each milestone ends with tests passing and, where there's UI, a browser check.
 
-**M0 — Fork.** Copy map_generator's `src/`, `public/`, configs, `index.html`, `.nvmrc`,
-`LICENSE` and README into this repo. Leave out `docs/`, `dist/`, `node_modules/` and `.claude/`.
-Rename the package. All 1,012 tests pass. Add the license notices (see Licensing).
+**M0 — Fork. ✅ Done 2026-11-04.** Copy map_generator's `src/`, `public/`, configs, `index.html`,
+`.nvmrc`, `LICENSE` and README into this repo. Leave out `docs/`, `dist/`, `node_modules/` and
+`.claude/`. Rename the package. All 1,012 tests pass. Add the license notices (see Licensing).
 
 **M1 — Headless WFC in TypeScript. ✅ Done 2026-11-04.** Ported `HexTileData`,
 `HexWFCCore`, `SeededRandom`, the worker solver, `WFCManager` and the recovery loop from
@@ -272,7 +300,8 @@ from hex-map-wfc, and why (each file's header has the details):
 - **`isLocked`** for revealed hexes: never unfixed, never re-solved by Local-WFC; dropped
   if necessary, which leaves their tile unchanged.
 - **The recovery loop runs inside the worker** as one synchronous call. A request carries
-  only the tiles within 12 hexes of the chunk center, so the worker keeps no state.
+  only the tiles within 12 hexes of the chunk center (14 since M2's lookahead), so the worker
+  keeps no state.
 - **Chaining prunes are on the backtracking trail**, so backtracking restores them.
   hex-map-wfc loses them for the rest of the try.
 - **Grass edges must match in level.** That's what hex-map-wfc's solver actually enforces;
@@ -320,19 +349,20 @@ and solved 3 chunks (651 tiles, no mismatches or drops). Changes to M1's `wfc/` 
   hexes wide on the party and zooms from 4 to 80 hexes.
 - `fieldsFor` moved from `world/solve.ts` to `world/fields.ts`, so the reducer doesn't import
   the solver. `HexGeo` gained `coastEdges`.
-- Roads are drawn only; they have no game effect yet (open question 3).
+- Roads were drawn only at this point; M6 made road ends, junctions and river crossings
+  settlement anchors. Road density is punch-list item 1.
 - 12 new tests (1,089 in all). Three older heavy tests (chunk lattice, adjacency masks, zones)
   got explicit 30 s timeouts: on a loaded machine they ran up to ~9 s and hit Vitest's 5 s
-  default, on the committed M2 code too. Browser check (production build, headless Chromium): starts on
-  Forest/jungle, Desert/arctic, Mountain and Ocean; walking reveals hexes with tile terrain;
-  GM view draws all 1,519 tiles; double-click opens the hex detail page.
+  default, on the committed M2 code too. Browser check (production build, headless Chromium):
+  starts on Forest/jungle, Desert/arctic, Mountain and Ocean; walking reveals hexes with tile
+  terrain; GM view draws all 1,519 tiles; double-click opens the hex detail page.
 
 **M4 — 3D map.** Split in two (user, 2026-11-05):
 
-**M4a — Playable 3D map. ✅ Done 2026-11-05.** Port the tile renderer (models from the GLB, placed per hex), lighting
-and camera into `render3d/`, lazy-loaded. Biome tinting (Swamp, Desert/arctic, Forest… on grass
-tiles), party and POI markers, picking (click moves the party, double-click opens the hex), and
-the 2D/3D toggle. Decisions (2026-11-05):
+**M4a — Playable 3D map. ✅ Done 2026-11-05.** Port the tile renderer (models from the GLB,
+placed per hex), lighting and camera into `render3d/`, lazy-loaded. Biome tinting (Swamp,
+Desert/arctic, Forest… on grass tiles), party and POI markers, picking (click moves the party,
+double-click opens the hex), and the 2D/3D toggle. Decisions (2026-11-05):
 - **Fog: grey silhouettes.** In player view, unrevealed solved tiles are drawn as flat, unlit
   grey shapes (the land's outline shows, no color or detail); the clickable frontier is
   highlighted. GM view draws them in full color, dimmed, as in 2D.
@@ -368,9 +398,11 @@ only when the 3D view opens; the main bundle didn't grow. What's worth knowing:
   WebGPU here, so on the WebGL2 fallback with software rendering): the 3D view opens in
   0.6-5 s; player view, GM view, a tilted close-up; click moves the party, double-click opens
   the hex page, drag pans without moving it; Hills and Desert/arctic starts.
-- Not checked: a real WebGPU browser (the headless one has none). Worth a look on your machine.
+- Not checked here: a real WebGPU browser (the headless one has none). The user checked it in
+  Chrome on 2026-11-05.
 
-**M4b — 3D polish. ✅ Done 2026-11-05.** Animated water (caustics, coastal waves), decorations, post-processing.
+**M4b — 3D polish. ✅ Done 2026-11-05.** Animated water (caustics, coastal waves), decorations,
+post-processing.
 Decisions (user, 2026-11-05):
 - **No buildings until M6.** hex-map-wfc scatters houses and windmills along roads; here a
   building would suggest a settlement the game doesn't have. M6 puts buildings on POI hexes.
@@ -404,7 +436,7 @@ knowing:
   fallback with software rendering, "reduce motion" emulated): AO, depth of field, vignette,
   grain, sparkles and coastal waves all render; scenery per terrain; click, double-click and
   drag still work. With animation on, software rendering is too slow for scripted screenshots.
-  **Not checked on real WebGPU, nor how heavy the effects are on a real GPU.**
+  **Not checked here on real WebGPU; the user checked the view in Chrome on 2026-11-05.**
 
 **M5 — Chunk growth. ✅ Done 2026-11-05.** Background solve near edges, triggered early enough
 that revealed hexes never border an unsolved chunk (section 4). `isLocked` from M1 enforces the
@@ -430,9 +462,10 @@ revealed-is-fixed rule.
   with animation on, too slow in software rendering).
 
 **M6 — Map-aware points of interest. ✅ Done 2026-11-05.** Settlement anchors, 3D and 2D markers, and
-`waterForHex` reading real tile edges. This picks up map_generator's punch-list items 1b and 1c
-(town-map rivers following their real edges, and combined water) as follow-ups.
-Decisions (user, 2026-11-05), answering open question 1:
+`waterForHex` reading real tile edges. The rest of the town-map water work (river bends,
+junctions, mouths and lakes) is punch-list item 2.
+Decisions (user, 2026-11-05), answering the open question of whether anchors replace or add
+to the d200's settlements:
 - **Add:** settlement anchors become settlements, and the d200 still gives settlements anywhere
   as today. Anchors are road ends, road junctions (3+ roads) and river crossings: about 6.4% of
   land hexes, so roughly 12% of revealed hexes end up settlements (6% before). An anchor's
@@ -451,9 +484,9 @@ Built:
 - **Town-map water from tile edges** (`waterForEdges`, settlementPlan.ts): the coast faces the
   hex's sea edges (shoreline edges count half, so a tile touching water only at a corner faces
   that corner); otherwise a river leaves through the hex's first river edge; an Ocean hex keeps
-  its random-side coast. Used whenever the hex has a tile (the /poi review page still uses
-  revealed neighbors). The isthmus problem from punch-list 1a can't happen: a tile's water edges
-  are contiguous. River bends and lakes are still 1b and 1c.
+  its random-side coast. Used whenever the hex has a tile (the /poi review page has none, so
+  its Ocean and Coast settlements get a random side). The isthmus problem from map_generator's 1a can't happen: a tile's water
+  edges are contiguous. River bends and lakes are punch-list item 2.
 - **3D:** POI models from `planPoiModels` (scenery.ts) in spots clear of the hex's road, river
   or water (`poiSlots`): Village 2 houses and a well, Town 3 houses, church, market, City town
   hall, church, market, tower, 2 houses, Metropolis adds a smithy and a house (buildings scaled
@@ -501,8 +534,8 @@ unrevealed hexes ahead of the party from GM view can come later.
   revealed land and a Mountain edit beside it both ended as mismatches with the note, the 2D
   dashed hex and the 3D ring; no revealed tile changed.
 
-**M8 — Saving and polish. ✅ Done 2026-11-05.** Versioned save, an approximate size meter, new-campaign dialog
-(seed, starting terrain), and a PNG export of the 2D map.
+**M8 — Saving and polish. ✅ Done 2026-11-05.** Versioned save, an approximate size meter,
+new-campaign dialog (seed, starting terrain), and a PNG export of the 2D map.
 Decisions (user, 2026-11-05): PNG export in two versions (player and GM); add saving the
 campaign to a file and loading it back.
 - The save was already versioned (M3). New: a notice on the start screen when a save from an
@@ -521,14 +554,114 @@ campaign to a file and loading it back.
 - 9 new tests (1,147 in all). Browser check: a word seed, the menu, save to file, both PNGs
   (746 x 672 and 6,012 x 6,192 px), New map, and loading the file back (identical campaign).
 
-## From map_generator's punch list
+## Punch list (updated 2026-11-05)
 
-- **1a (terrain that depends on its neighbors): replaced** by WFC plus biome noise (M2/M5).
-  Its targets still apply: the biggest landmass at least 95% of revealed land, seas mostly 100+
-  hexes, rivers on about 17% of land hexes, lakes on about 5%.
-- **1b, 1c (town-map water): easier,** because rivers and coasts now have real edges. After M6.
-- **2-9 (site maps, tracking, Mongo, encounter rollers, polish, content): carried over
-  unchanged.** They're independent of the overland map.
+All open work, in one suggested order. **Waiting on** says who moves next: the user (a
+decision, a reference image or table content) or Claude (ready to build). Sizes are rough:
+S a few hours, M a day or two, L several days.
+
+| # | Item | Area | Waiting on | Depends on | Size |
+|---|---|---|---|---|---|
+| 1 | Fewer roads: about 10% of land hexes | Overland map | Claude: ready | | S-M |
+| 2 | Town-map water from tile shapes | Overland map | Claude: ready | | L |
+| 3 | GM editing of unrevealed hexes | Overland map | Claude: ready (a few design questions) | | M |
+| 4 | Encounter rollers for dungeons, and the Tavern table | Sites | Claude: ready | | S |
+| 5 | No repeated room text within one dungeon | Sites | Claude: ready | | S |
+| 6 | Site maps for Tombs, Ruins and Temples | Sites | User: a reference image per kind | | L |
+| 7 | Site-interaction tracking | Sites | User: answer the scope questions | 6 (map markers only) | L |
+| 8 | Mongo backend and multiple campaigns | App | User: choose hosting | 6, 7 | L |
+| 9 | 2D Coast color | 2D map | User: a reference image | | S |
+| 10 | Encounter tables for Tower, Shrine, Rift, Keep, Camp | Sites | User: the tables | | M |
+| 11 | Road encounter tables | Overland map | User: the tables | | S-M |
+| 12 | Camp central-feature table | Sites | User: the table | | S |
+| 13 | NPC activity that fits the profession | Sites | User: only if it bothers them in play | | S |
+
+### Details
+
+**1. Fewer roads.** WFC puts roads on about 24% of land hexes, a lot for 6-mile wilderness
+hexes. Target (user, 2026-11-05): about 10%, by lowering the road tile weights in the world
+rules, measured with `npm run sim`. Roads are not drawing only: since M6, road ends, road
+junctions and river crossings are settlement anchors (about 6.4% of land), so fewer roads
+means fewer anchored settlements; measure the anchor share alongside and check it with the
+user. The change affects unsolved ground only, never solved hexes, and must keep "0 failed, 0
+dropped cells". Travel rates on roads are out of scope for now (user, 2026-11-05).
+
+**2. Town-map water from tile shapes.** The town map draws one straight river or one coast:
+`waterForEdges` (settlementPlan.ts) uses only the first river edge, and the river is a
+straight band cut out with convex half-plane clipping, so this replaces that code. A layout
+change that keeps the current look: no reference image, the user checks screenshots.
+
+| Shape | Draw it as |
+|---|---|
+| Straight river (RIVER_A, river crossings) | Drawn right today |
+| Bend (RIVER_B, in NE and out W; one of the two commonest river tiles) | Following the bend |
+| River end (RIVER_END) | From the town's middle out to its one edge; with a lake, into a lakeshore |
+| Junction (RIVER_D/E/F, three river edges) | Two rivers joining |
+| River mouth (RIVER_INTO_COAST) | Coast and river together (today the river is lost) |
+| Lake on a plain grass hex | A lakeshore on one side, reusing the coast drawing, side from the seed |
+
+Also: the /poi review page has no map hex, so its Ocean and Coast settlements get a random
+water side; give it a way to pick a tile shape, so every water case can be reviewed there.
+Later: a true island drawing for towns on Ocean hexes.
+
+**3. GM editing of unrevealed hexes.** M7 edits revealed hexes only (the hex page's Edit
+form). This adds editing hexes ahead of the party from the GM view. To settle first: how the
+GM picks a hex and terrain there, and whether edited unrevealed hexes are protected from
+later re-solves.
+
+**4. Encounter rollers for dungeons, and the Tavern table.** The Cave, Deep Tunnels, Ruins and
+Tavern d100 tables exist, but no screen uses them. `DungeonSiteView` has no encounter roller;
+`SITE_TYPE_TO_ENCOUNTER_KEY` (encounterTables.ts; Tomb uses Ruins, since the book has no Tomb
+table) is referenced only by its test. Reuse `EncounterRoller`.
+
+**5. No repeated room text.** Reroll once on an exact match. The book allows repeats; this is
+only for variety.
+
+**6. Site maps for Tombs, Ruins and Temples.** Tower, Keep, Settlement and Camp are done. Tomb
+and Ruins are dungeon types drawn by `DungeonMapSvg.tsx` in the shared classic-blue style.
+"Temple" is both `Temple (oracle)` (d200 84-87, a Shrine, which has no map today, so it needs a
+new one) and `Ruins (temple)` (a Ruins dungeon); user: both (2026-11-01). Confirm style-only
+vs. layout per kind. Before tracking, whose map markers would otherwise be built twice, and
+before Mongo, since a layout change alters generated data.
+
+**7. Site-interaction tracking.** A typed per-site event log at room or feature level (monster
+defeated, treasure looted, NPC killed/recruited/talked to, door forced), not freeform notes,
+so a revisited site reflects what the party did. Triggered by party actions, not a GM
+"advance time" button. Scope questions: which event types; which site kinds (dungeons
+first?); how events show (contents marked cleared, or a per-room log); undo; what Reroll Site
+does to a log. Everything but the map markers can be built before item 6. Before Mongo,
+because it changes the saved schema.
+
+**8. Mongo backend and multiple campaigns.** Reuses the user's Atlas cluster with a new
+database. Open: sharing TypeScript types between client and server (two tsconfigs,
+unverified), and hosting with an SPA route fallback. Less urgent than it was: a 7-chunk
+campaign saves as about 26 kB of the ~5 MB localStorage, and M8's Save to file moves a
+campaign between browsers. Moves up if multi-device play is needed.
+
+**9. 2D Coast color.** The land part of a shore hex is filled with Coast's blue (`#4a90c4`,
+`hexgrid/colors.ts`), so up close it reads like shallow water beside the drawn sea. Noticed by
+Claude in the M3 browser check; the user kept it as an item on 2026-11-05. A land color, or the
+neighboring biome's, would separate land from water.
+
+**11. Road encounter tables.** When the party is on a road hex, roll on road encounter
+tables instead of the terrain's (user, 2026-11-05). Waits on the tables from the user, since
+tables are transcribed verbatim. To settle when they arrive: what counts as "on a road" (any
+hex with a road edge?), and whether road tables vary by terrain.
+
+**13. NPC activity tier.** `npcTables.ts`'s 1d5 tier ignores profession (e.g. "Dwarf Labourer
+— Infirm").
+
+### Closed, and not planned
+
+Closed: the 3D view on real WebGPU (checked by the user in Chrome, 2026-11-05), hex
+scale (6 miles per hex, user, 2026-11-05; see Decisions),
+map_generator's 1a (replaced by WFC and biome noise; its targets hold, see section 2),
+the open question of whether anchors replace or add to the d200 (add, M6), and the fog look
+in 3D (grey silhouettes, M4).
+Map_generator's 1b and 1c became item 2.
+
+Not planned: a turn-clock state machine, a full procedural dungeon crawler, NPC adventuring
+parties, combat stat blocks (name and flavor only), undo.
 
 ## Licensing
 
@@ -537,36 +670,28 @@ campaign to a file and loading it back.
 - Ported hex-map-wfc code is **MIT**. Keep Felix Turner's copyright and MIT notice in the
   header of each ported file and in the README's Attribution section. MIT allows reuse inside a
   CC BY-SA project.
-- KayKit Medieval Hexagon Pack (`hex-terrain.glb`, textures): credit Kay Lousberg. **Check the
-  pack's license (believed to be CC0) before M4.**
+- KayKit Medieval Hexagon Pack (`hex-terrain.glb`, textures) by Kay Lousberg: **CC0**
+  (checked in M4a). Credited in the README anyway.
+- The "Venice Sunset" HDRI from Poly Haven (`venice_sunset_1k.hdr`, the 3D sky lighting):
+  **CC0**. Credited in the README.
 - map_generator's rule carries over: don't name any other game, publisher or rulebook in the
-  project.
+  project, except where a license requires attribution (Basic Fantasy, above and in the
+  README).
 
 ## Risks
 
 - **Revealed hexes can't be changed.** hex-map-wfc's recovery freely unfixes neighbor cells.
   M1 measured the cost: solves still always succeed, but with every boundary tile locked, 16%
-  need drops, which leave a visible seam (hidden by a mountain in 3D). Mitigation: grow chunks
-  early (section 4). M7's local re-solves near revealed hexes face the same limit.
+  need drops, which leave an edge that doesn't match. Mitigation, built in M5: grow chunks
+  early (section 4); measured since, one drop in 360 chunk solves. M7's local re-solves near
+  revealed hexes face the same limit, which is why M7 has the fallback and mismatch flag.
 - **Small tile set.** It has no swamp, desert, forest or lake tiles. Biome tinting and
   decorations must make these readable in 3D, and the 2D view relies on fill color plus icons.
-- **WebGPU support.** Safari and Firefox support varies. The 2D view is always available, and
-  the 3D view needs a tested WebGL2 fallback.
-- **Bundle size.** Three.js plus a 2.5 MB GLB plus textures. Lazy-load `render3d/` so the 2D
-  view and site pages load fast.
-- **Tooling limits** from map_generator: Node 20.16 and Vite 6.4 (not 7 or 8). hex-map-wfc
-  uses Vite 6 and Three.js 0.183, so they should fit together. Check this in M0/M4.
-  hex-map-wfc's dev server uses HTTPS (`basic-ssl`). WebGPU works on `http://localhost`, so
-  this probably isn't needed.
-
-## Open questions (decide when we get there)
-
-1. ~~Settlement anchor rate: should anchors replace the d200 settlement rows, or add to them?~~
-   Answered 2026-11-05: add (see M6).
-2. Is a hex 6 miles across, as in map_generator? A 217-hex chunk is then about 100 miles
-   across. (M2)
-3. Should roads be game data (faster travel, more encounters along roads) or just look? (M3)
-   Note: WFC puts roads on about 24% of land hexes, which is a lot for 6-mile wilderness hexes.
-   Lowering road tile weights in the world rules is easy if that reads wrong.
-4. Fog look in 3D: hide unrevealed tiles, or show clouds/parchment? (M4; needs a reference
-   image, per map_generator's rule for visual changes)
+- **WebGPU support.** Safari and Firefox support varies. The 2D view is always available. The
+  WebGL2 fallback was tested headless (M4), and the user checked WebGPU in Chrome
+  (2026-11-05).
+- **Bundle size.** Three.js plus a 2.5 MB GLB plus textures. `render3d/` is lazy-loaded: the 3D
+  chunk is 930 kB (258 kB gzipped), and the main bundle didn't grow (M4a).
+- **Tooling limits** from map_generator: Node 20.16 and Vite 6.4 (not 7 or 8). Confirmed
+  working with Three.js 0.183.2 (M4). hex-map-wfc's HTTPS dev server isn't needed: WebGPU works
+  on `http://localhost`.
