@@ -325,6 +325,14 @@ campaign to a file and loading it back.
   Screenshots of a straight river, a bend, a river end, two junctions and a village bend were
   checked by Claude and approved by the user (2026-11-06), junctions included.
 
+### Handoff gaps (2026-11-06, branch `handoff-gaps`)
+
+So another agent with only this repo can take punch-list items 1-5: `npm run town-maps`
+(scripts/townMaps.ts) renders the town map for every water tile and screenshots it; CLAUDE.md
+gained the headless-Chromium technique (previously only in Claude's session memory) and a
+"Working with the user" section; PLAN.md item 2 got a self-contained spec for the /poi water
+picker in place of a pointer to map_generator's `poiReviewRiver.ts`.
+
 ## Risks, as written during the build
 
 PLAN.md's Risks section has them as they stand now.

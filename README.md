@@ -28,6 +28,7 @@ npm run test       # run the Vitest suite
 npm run build      # typecheck and build for production
 npx tsc -b         # typecheck only
 npm run sim -- --seeds 10   # generate worlds and report terrain statistics (for tuning)
+npm run town-maps -- --png   # render a town map for every water tile, with a screenshot
 ```
 
 ## License
