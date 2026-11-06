@@ -1,7 +1,7 @@
 # History: how the WFC Hex Crawl Generator was built
 
 The build log for milestones M0-M8, moved out of `docs/PLAN.md` on 2026-11-05 so the plan
-describes only the system as it is and the open work. Nothing here is current spec: where this
+describes only the system as it is and the open work, followed by punch-list work since. Nothing here is current spec: where this
 log and PLAN.md disagree, PLAN.md wins. Code comments that cite "PLAN.md M5" and the like mean
 the entries below.
 
@@ -299,6 +299,31 @@ campaign to a file and loading it back.
 - A 7-chunk campaign saves as about 26 kB, so storage is far from a limit in normal play.
 - 9 new tests (1,147 in all). Browser check: a word seed, the menu, save to file, both PNGs
   (746 x 672 and 6,012 x 6,192 px), New map, and loading the file back (identical campaign).
+
+## After M8: punch-list work
+
+### Item 2, town-map rivers (2026-11-06, branch `town-map-rivers`)
+
+- **Ported from map_generator's PR #1** (its punch-list 1b, still open there when ported):
+  `riverCourse.ts` (the course through a notional hex, the cubic bend, distance helpers), the
+  curved block cutting in settlementPlan.ts (`riverShape`, `cutCellByRiver`, `weldCells`, the
+  bridge spots and the wall-gap walk), `RiverArt` in SettlementMapSvg.tsx, and its test helpers
+  (`settlementRiverChecks.ts`). Changes: pointy-top edges named by `HexDir`, and
+  `riverCourseFromEdges` (new) to turn a tile's undirected river edges into an entry and exit.
+  map_generator's 1a code (world formula, neighbor-weighted terrain, per-hex river records)
+  wasn't taken: WFC already does that job here.
+- **Baseline:** before any edit, 288 coast-only, island and no-water towns (24 seeds × 4 sizes ×
+  3 cases) were hashed from main at 5275db4 into `settlementPlanBaseline.test.ts`; all came out
+  identical after the port. The hashes match map_generator's own pre-1b baseline, so the two
+  settlement plans hadn't drifted.
+- **Junctions** (RIVER_D/E/F) are drawn as two arms meeting at the exit, which reads as two
+  rivers joining; RIVER_D's even split gives its exit to the first edge in NE…NW order.
+- **The no-tile river** (`waterForHex` on the /poi page) snaps the Coast neighbor's direction
+  to the nearest edge and stays straight; with no direction, the plan picks a straight pair
+  from the seed.
+- Tests: 1,497 in about 30 s; the river sweep runs in its own file.
+  Screenshots of a straight river, a bend, a river end, two junctions and a village bend were
+  checked by Claude and approved by the user (2026-11-06), junctions included.
 
 ## Risks, as written during the build
 

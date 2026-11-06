@@ -8,6 +8,8 @@ fixed or cut from PLAN.md. Line numbers drift; the named symbol is what counts.
 
 Last run: 2026-11-05.
 Result: 58 claims; 55 held, and 3 errors from the trim itself were found and fixed (marked FIXED).
+Partial re-run 2026-11-06 (town-map rivers, punch-list item 2): rows 4 and 39 re-checked and
+their evidence updated, rows 4a and 39a added; both hold.
 
 ## File tree
 
@@ -16,7 +18,8 @@ Result: 58 claims; 55 held, and 3 errors from the trim itself were found and fix
 | 1 | data/: Terrain includes Coast and Hills | data/tables.ts:12,14 | ✓ |
 | 2 | data/: the 3d6 start table | data/tables.ts:32 `terrainFor3d6` | ✓ |
 | 3 | engine/generateHex.ts: anchor settlements | generateHex.ts:78 `rollAnchorSettlement` | ✓ |
-| 4 | engine/settlementPlan.ts: tile-edge water | settlementPlan.ts:218 `waterForEdges` | ✓ |
+| 4 | engine/settlementPlan.ts: tile-edge water | settlementPlan.ts:254 `waterForEdges` | ✓ |
+| 4a | engine/riverCourse.ts: town-map river courses | riverCourse.ts:97 `riverCourseFromEdges`, :150 `riverCourseInHex` | ✓ |
 | 5 | wfc/tiles.ts: the tile set, edges and levels | exports `TILE_LIST`, `TileDef`, `LEVELS_COUNT` | ✓ |
 | 6 | wfc/cube.ts: cube helpers | exports `cubeKey`, `cubeDistance`, `cubeNeighbor`… | ✓ |
 | 7 | wfc/rules.ts: edge matching, adjacency, findMismatches | exports `edgesMatch`, `AdjacencyRules`, `findMismatches` | ✓ |
@@ -56,7 +59,8 @@ Result: 58 claims; 55 held, and 3 errors from the trim itself were found and fix
 | 36 | wfc/ knows nothing about the world | no `../world` import in src/wfc | ✓ |
 | 37 | wfc/ and world/ have no Three.js or React | no `three` or `react` import in either | ✓ |
 | 38 | only render3d/ imports Three.js, and it's lazy-loaded | grep; App.tsx:14 `lazy(import(...))`; no static import of render3d elsewhere; build: main bundle has no `WebGPURenderer` | ✓ |
-| 39 | pointy-top; settlement water maps tile edges to angles | hexMath.ts:1; settlementPlan.ts `EDGE_ANGLE_DEG`; settlementWater.test.ts:111 | ✓ |
+| 39 | pointy-top; settlement water maps tile edges to angles | hexMath.ts:1; riverCourse.ts:54 `EDGE_ANGLE_DEG` (used by `waterForEdges`); settlementWater.test.ts:125 | ✓ |
+| 39a | town-map rivers: crossings at the river edges' midpoints; one edge ends in town, two run through, three join; blocks cut around the band, wall gapped, bridged on main roads | riverCourse.ts `riverCourseFromEdges`, `hexEdgeMidpoint`; settlementPlan.ts `cutCellByRiver`, `weldCells`, the bridges and wall loops in `computeSettlementPlan`; settlementRiverChecks.ts `checkRiverTown` (items 1-6), riverCourse.test.ts | ✓ |
 | 40 | the three routes | App.tsx:79-81 | ✓ |
 
 ## Data flow

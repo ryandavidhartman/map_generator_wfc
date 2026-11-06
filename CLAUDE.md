@@ -6,7 +6,7 @@ site generators forked from `~/dev/source/map_generator`.
 
 **Read `docs/PLAN.md` first.** It has the punch list (all open work), the decisions, how the
 system works, and its architecture and data flow. `docs/HISTORY.md` is the M0-M8 build log,
-with the measurements and bug fixes; code comments citing "PLAN.md M5" and the like mean
+then punch-list work since, with the measurements and bug fixes; code comments citing "PLAN.md M5" and the like mean
 entries there. `docs/ARCHITECTURE-CHECKLIST.md` ties every claim in PLAN.md's Architecture
 section to code; when a change makes one untrue, update both.
 

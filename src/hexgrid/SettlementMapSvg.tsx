@@ -5,7 +5,7 @@
 // comes from engine/settlementPlan.ts, derived at render time from the Settlement's districts
 // (nothing extra is persisted). Districts are clickable and numbered; the seat gets a star.
 
-import type { Block, Pt, SettlementPlan } from '../engine/settlementPlan'
+import type { Block, PlanWater, Pt, SettlementPlan } from '../engine/settlementPlan'
 
 export type SettlementMapDistrictData = { label: string; isSeat: boolean }
 
@@ -144,6 +144,22 @@ function BlockArt({ block, walled }: { block: Block; walled: boolean }) {
   }
 }
 
+// The river (PLAN.md punch-list item 2, ported from map_generator's 1b): each arm is a
+// constant-width, round-capped stroke. All edge strokes first, then all water strokes, so arms
+// that overlap (a junction) show no seam, and the visible edge stays 0.25 wide.
+function RiverArt({ water }: { water: Extract<PlanWater, { kind: 'river' }> }) {
+  return (
+    <g style={{ pointerEvents: 'none' }} data-river-arms={water.arms.length}>
+      {water.arms.map((arm, i) => (
+        <polyline key={`e${i}`} points={pts(arm)} fill="none" stroke={WATER_EDGE} strokeWidth={water.halfWidth * 2 + 0.5} strokeLinecap="round" strokeLinejoin="round" />
+      ))}
+      {water.arms.map((arm, i) => (
+        <polyline key={`w${i}`} points={pts(arm)} fill="none" stroke={WATER} strokeWidth={water.halfWidth * 2} strokeLinecap="round" strokeLinejoin="round" />
+      ))}
+    </g>
+  )
+}
+
 export function SettlementMapSvg({ plan, districts, selectedDistrictId, onSelectDistrict }: SettlementMapSvgProps) {
   const { bounds } = plan
   const width = bounds.maxX - bounds.minX
@@ -189,9 +205,7 @@ export function SettlementMapSvg({ plan, districts, selectedDistrictId, onSelect
             <polygon points={pts(plan.water.sea)} fill={WATER} stroke={WATER_EDGE} strokeWidth={0.25} strokeLinejoin="round" />
           </g>
         )}
-        {plan.water?.kind === 'river' && (
-          <polygon points={pts(plan.water.river)} fill={WATER} stroke={WATER_EDGE} strokeWidth={0.25} strokeLinejoin="round" style={{ pointerEvents: 'none' }} />
-        )}
+        {plan.water?.kind === 'river' && <RiverArt water={plan.water} />}
         {!plan.walled &&
           plan.mainRoads.map(([a, b], i) => (
             <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={DIRT_ROAD} strokeWidth={2.2} strokeLinecap="round" />

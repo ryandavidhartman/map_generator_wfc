@@ -24,7 +24,7 @@ S a few hours, M a day or two, L several days.
 | # | Item | Area | Waiting on | Depends on | Size |
 |---|---|---|---|---|---|
 | 1 | Fewer roads: about 10% of land hexes | Overland map | Claude: ready | | S-M |
-| 2 | Town-map water from tile shapes | Overland map | Claude: ready | | L |
+| 2 | Town-map water from tile shapes (rivers done; mouth, lakes, /poi left) | Overland map | Claude: ready | | M |
 | 3 | GM editing of unrevealed hexes | Overland map | Claude: ready (a few design questions) | | M |
 | 4 | Encounter rollers for dungeons, and the Tavern table | Sites | Claude: ready | | S |
 | 5 | No repeated room text within one dungeon | Sites | Claude: ready | | S |
@@ -47,23 +47,26 @@ fewer anchored settlements; measure the anchor share alongside and check it with
 The change affects unsolved ground only, never solved hexes, and must keep "0 failed, 0
 dropped cells". Travel rates on roads are out of scope for now (user, 2026-11-05).
 
-**2. Town-map water from tile shapes.** The town map draws one straight river or one coast:
-`waterForEdges` (settlementPlan.ts) uses only the first river edge, and the river is a
-straight band cut out with convex half-plane clipping, so this replaces that code. A layout
-change that keeps the current look: no reference image, the user checks screenshots.
+**2. Town-map water from tile shapes.** The town map used to draw one straight river or one
+coast. A layout change that keeps the current look: no reference image, the user checks
+screenshots. The rivers were done and approved by the user on 2026-11-06 (branch `town-map-rivers`) by porting
+map_generator's river code from its PR #1 (its punch-list 1b): `riverCourse.ts` and the
+curved block cutting in settlementPlan.ts (section 5). Coast-only and no-water towns came
+out unchanged (`settlementPlanBaseline.test.ts`).
 
-| Shape | Draw it as |
-|---|---|
-| Straight river (RIVER_A, river crossings) | Drawn right today |
-| Bend (RIVER_B, in NE and out W; one of the two commonest river tiles) | Following the bend |
-| River end (RIVER_END) | From the town's middle out to its one edge; with a lake, into a lakeshore |
-| Junction (RIVER_D/E/F, three river edges) | Two rivers joining |
-| River mouth (RIVER_INTO_COAST) | Coast and river together (today the river is lost) |
-| Lake on a plain grass hex | A lakeshore on one side, reusing the coast drawing, side from the seed |
+| Shape | Draw it as | Status |
+|---|---|---|
+| Straight river (RIVER_A, river crossings) | Straight, as before | Done |
+| Bend (RIVER_B, in NE and out W; one of the two commonest river tiles) | Following the bend | Done |
+| River end (RIVER_END) | From its one edge to the town's middle; with a lake, into a lakeshore | Done without the lake |
+| Junction (RIVER_D/E/F, three river edges) | Two rivers joining | Done: two arms meeting at the exit (user approved, 2026-11-06) |
+| River mouth (RIVER_INTO_COAST) | Coast and river together (today the river is lost) | Open |
+| Lake on a plain grass hex | A lakeshore on one side, reusing the coast drawing, side from the seed | Open |
 
-Also: the /poi review page has no map hex, so its Ocean and Coast settlements get a random
-water side; give it a way to pick a tile shape, so every water case can be reviewed there.
-Later: a true island drawing for towns on Ocean hexes.
+Also open: the /poi review page has no map hex, so its Ocean and Coast settlements get a
+random water side; give it a way to pick a tile shape, so every water case can be reviewed
+there. The map_generator PR's `poiReviewRiver.ts` does this for its own river model and can be
+adapted. Later: a true island drawing for towns on Ocean hexes.
 
 **3. GM editing of unrevealed hexes.** GM editing (section 6) covers revealed hexes only, from
 the hex page's Edit form. This adds editing hexes ahead of the party from the GM view. To
@@ -128,7 +131,7 @@ scale (6 miles per hex, user, 2026-11-05; see Decisions),
 map_generator's 1a (replaced by WFC and biome noise; its targets hold, see section 2),
 the open question of whether anchors replace or add to the d200 (add, M6), and the fog look
 in 3D (grey silhouettes, M4).
-Map_generator's 1b and 1c became item 2.
+Map_generator's 1b and 1c became item 2 (1b's river code was ported on 2026-11-06).
 
 Not planned: a turn-clock state machine, a full procedural dungeon crawler, NPC adventuring
 parties, combat stat blocks (name and flavor only), undo.
@@ -327,11 +330,19 @@ spread between worlds is wide by design: some are wetter, colder or more mountai
   POI hex.
 - The site generators are unchanged except the settlement's water: `waterForEdges` reads the
   hex's real coast and river edges from its tile. The coast faces the sea edges (shoreline
-  edges count half); otherwise a river leaves through the first river edge; an Ocean hex keeps
-  a random-side coast. A tile's water edges are contiguous, so map_generator's isthmus problem
+  edges count half); otherwise a river runs through all the river edges; an Ocean hex keeps a
+  random-side coast. A tile's water edges are contiguous, so map_generator's isthmus problem
   can't happen. `waterForMapHex` (which calls `waterForHex`), the old guess from revealed
-  neighbors, is used only when a hex has no tile, such as on the /poi review page. Bends,
-  junctions, mouths and lakes are punch-list item 2.
+  neighbors, is used only when a hex has no tile, such as on the /poi review page; its river
+  is straight.
+- **Town-map rivers** (`riverCourse.ts`, ported from map_generator): the town map is a square
+  whose half-size is a notional pointy-top hex's apothem, so the river crosses the map's edge
+  at the edge midpoints of the hex's river edges. Tile river edges have no flow direction:
+  `riverCourseFromEdges` makes one edge a river ending in town, two edges a river through
+  (straight or bending through the middle), and three a junction whose two arms join and leave
+  through the edge farthest from the others. The plan cuts the blocks around the curved band
+  (`cutCellByRiver`, `weldCells`), gaps the wall where it crosses and bridges it on main roads.
+  River mouths and lakes are punch-list item 2.
 
 ### 6. GM editing
 
@@ -388,7 +399,8 @@ and in HISTORY.md. Every claim here is checked against the code in
 src/
   data/        ← from map_generator: tables (Terrain gained Coast and Hills; 3d6 start table)
   engine/      ← from map_generator: sites, encounters, treasure; anchor settlements in
-                 generateHex.ts, tile-edge water in settlementPlan.ts
+                 generateHex.ts, tile-edge water in settlementPlan.ts, town-map river
+                 courses in riverCourse.ts
   wfc/         ← ported from hex-map-wfc
     tiles.ts          the tile set (TILE_LIST): edges and levels per tile
     cube.ts           cube-coordinate helpers
