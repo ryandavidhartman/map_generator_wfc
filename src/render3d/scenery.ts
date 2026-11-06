@@ -6,7 +6,7 @@
 // river ends, tree density tiers) come from hex-map-wfc (src/hexmap/DecorationDefs.js and
 // Decorations.js), Copyright (c) 2026 Felix Turner, MIT License:
 // https://github.com/felixturner/hex-map-wfc/blob/main/LICENSE
-// Changes (user decisions for M4b, docs/PLAN.md):
+// Changes (user decisions for M4b, docs/HISTORY.md):
 // - Placement follows each hex's terrain instead of noise fields: Forest/jungle dense trees,
 //   Grassland occasional clumps, Swamp sparse trees with lilies and water plants,
 //   Desert/arctic rocks only, Hills and Mountains their hill and mountain models.
