@@ -4,16 +4,20 @@
 //   Settlement's hex | Neighbors              | Water on the map
 //   Ocean            | any                    | Coast toward the Ocean neighbors (random side if none known)
 //   Coast      | an Ocean neighbor      | Coast on that side
-//   Coast      | no Ocean neighbor      | River, toward a Coast neighbor if any, else random
+//   Coast      | no Ocean neighbor      | Straight river, toward a Coast neighbor if any, else random
 //   any other        | an Ocean neighbor      | Coast on that side
 //   any other        | no Ocean neighbor      | No water
 //
 // "Side" is the real direction of the neighboring hex on the overland map; only revealed
 // neighbors count. These tests cover the rules table for every terrain, the overland-map wiring
 // (waterForMapHex), the full chain from a real map to the drawn sea/river, and the random-side case.
+// Since M6 these rules apply only to hexes without a tile (the /poi review page); waterForEdges,
+// tested at the bottom, reads a tiled hex's edges. Since item 2 a river is a set of edges
+// (riverCourse.ts), so the neighbor's direction is snapped to the nearest edge.
 import { describe, expect, it } from 'vitest'
-import { computeSettlementPlan, waterForEdges, waterForHex, waterForMapHex, type Pt, type SettlementPlanInput } from './settlementPlan'
+import { computeSettlementPlan, waterForEdges, waterForHex, waterForMapHex, type Pt, type SettlementPlanInput, type SettlementWaterInput } from './settlementPlan'
 import { generateSettlement } from './generateSettlement'
+import { nearestEdge, oppositeEdge } from './riverCourse'
 import { ALL_TERRAINS, type Terrain } from '../data/tables'
 import { axialToPixel, hexId, neighborsOf, type AxialCoord } from '../hexgrid/hexMath'
 import type { SettlementType } from '../data/settlementTables'
@@ -45,6 +49,14 @@ function lineGap(a: number, b: number): number {
   return Math.min(angleGap(a, b), angleGap(a, b + Math.PI))
 }
 
+// A coast input's angle (a test failure if the water isn't a coast with an angle).
+function coastAngle(water: SettlementWaterInput | null): number {
+  expect(water?.kind).toBe('coast')
+  const angle = water?.kind === 'coast' ? water.angle : undefined
+  expect(angle).toBeDefined()
+  return angle!
+}
+
 function centroid(points: Pt[]): Pt {
   return { x: points.reduce((s, p) => s + p.x, 0) / points.length, y: points.reduce((s, p) => s + p.y, 0) / points.length }
 }
@@ -71,10 +83,10 @@ describe('water rules table, every terrain', () => {
     { label: 'an Ocean neighbor', neighbors: [{ terrain: 'Ocean', angle: east.angle }, { terrain: 'Coast', angle: 2 }] },
   ]
 
-  function expected(terrain: Terrain, label: string) {
+  function expected(terrain: Terrain, label: string): SettlementWaterInput | null {
     if (label === 'an Ocean neighbor') return { kind: 'coast', angle: east.angle }
     if (terrain === 'Ocean') return { kind: 'coast' }
-    if (terrain === 'Coast') return label === 'a Coast neighbor' ? { kind: 'river', angle: east.angle } : { kind: 'river' }
+    if (terrain === 'Coast') return label === 'a Coast neighbor' ? { kind: 'river', edges: ['W', 'E'] } : { kind: 'river', edges: [] }
     return null
   }
 
@@ -84,9 +96,11 @@ describe('water rules table, every terrain', () => {
         const got = waterForHex(terrain, neighbors)
         const want = expected(terrain, label)
         if (want === null) return expect(got).toBeNull()
-        expect(got?.kind).toBe(want.kind)
-        if (want.angle === undefined) expect(got?.angle).toBeUndefined()
-        else expect(angleGap(got!.angle!, want.angle)).toBeLessThan(1e-9)
+        if (want.kind === 'river') return expect(got).toEqual(want)
+        expect(got?.kind).toBe('coast')
+        const gotAngle = got?.kind === 'coast' ? got.angle : undefined
+        if (want.angle === undefined) expect(gotAngle).toBeUndefined()
+        else expect(angleGap(gotAngle!, want.angle)).toBeLessThan(1e-9)
       })
     }
   }
@@ -105,7 +119,7 @@ describe('waterForMapHex — reading the overland map', () => {
     const { hex, hexes } = mapWith('Grassland', { [id]: 'Ocean' })
     const water = waterForMapHex(hex, hexes)
     expect(water?.kind).toBe('coast')
-    expect(angleGap(water!.angle!, angle)).toBeLessThan(1e-9)
+    expect(angleGap(coastAngle(water), angle)).toBeLessThan(1e-9)
   })
 
   it('uses true screen directions on the pointy-top map: east is 0, south-east is +60° (y points down)', () => {
@@ -119,14 +133,14 @@ describe('waterForMapHex — reading the overland map', () => {
     const at: AxialCoord = { q: 7, r: -4 }
     const southEast = hexId({ q: 7, r: -3 })
     const water = waterForMapHex({ ...at, terrain: 'Grassland' }, { [hexId(at)]: { terrain: 'Grassland' }, [southEast]: { terrain: 'Ocean' } })
-    expect(water?.angle).toBeCloseTo(Math.PI / 3, 9)
+    expect(coastAngle(water)).toBeCloseTo(Math.PI / 3, 9)
   })
 
   it('two adjacent Ocean neighbors put the sea between them', () => {
     const [a, b] = [NEIGHBORS[0], NEIGHBORS[5]]
     const water = waterForMapHex(mapWith('Grassland', { [a.id]: 'Ocean', [b.id]: 'Ocean' }).hex, mapWith('Grassland', { [a.id]: 'Ocean', [b.id]: 'Ocean' }).hexes)
-    expect(angleGap(water!.angle!, a.angle)).toBeCloseTo(angleGap(water!.angle!, b.angle), 9)
-    expect(angleGap(water!.angle!, a.angle)).toBeLessThanOrEqual(Math.PI / 6 + 1e-9)
+    expect(angleGap(coastAngle(water), a.angle)).toBeCloseTo(angleGap(coastAngle(water), b.angle), 9)
+    expect(angleGap(coastAngle(water), a.angle)).toBeLessThanOrEqual(Math.PI / 6 + 1e-9)
   })
 
   it('ignores Ocean hexes that are revealed but not adjacent', () => {
@@ -145,14 +159,13 @@ describe('waterForMapHex — reading the overland map', () => {
     // Today's behavior, pinned so a change is deliberate; the rule itself doesn't say which.
     const [first, , third] = NEIGHBORS
     const { hex, hexes } = mapWith('Coast', { [third.id]: 'Coast', [first.id]: 'Coast' })
-    const water = waterForMapHex(hex, hexes)
-    expect(water?.kind).toBe('river')
-    expect(angleGap(water!.angle!, first.angle)).toBeLessThan(1e-9)
+    const exit = nearestEdge(first.angle)
+    expect(waterForMapHex(hex, hexes)).toEqual({ kind: 'river', edges: [oppositeEdge(exit), exit] })
   })
 
   it('a Coast hex with only dry neighbors gets a river in a random direction', () => {
     const { hex, hexes } = mapWith('Coast', { [NEIGHBORS[2].id]: 'Mountain' })
-    expect(waterForMapHex(hex, hexes)).toEqual({ kind: 'river' })
+    expect(waterForMapHex(hex, hexes)).toEqual({ kind: 'river', edges: [] })
   })
 
   // Open question for the user (2026-11-02): Ocean neighbors on opposite sides (an isthmus), or on
@@ -209,7 +222,8 @@ describe('random side (no direction known)', () => {
       const angles: number[] = []
       for (const type of TYPES) {
         for (const seed of SEEDS) {
-          const input = { ...inputFor(seed, type), water: { kind } }
+          const water: SettlementWaterInput = kind === 'coast' ? { kind } : { kind, edges: [] }
+          const input = { ...inputFor(seed, type), water }
           const plan = computeSettlementPlan(input)
           // Same settlement, same side — every visit.
           expect(computeSettlementPlan(input).water?.angle).toBe(plan.water?.angle)
@@ -242,21 +256,21 @@ describe('waterForEdges — the hex\'s real tile edges (M6)', () => {
     // COAST_A unrotated: water SE, shoreline E and SW -> straight toward SE (60°).
     const w = waterForEdges('Coast', { ...none, seaEdges: ['SE'], coastEdges: ['E', 'SW'] })
     expect(w?.kind).toBe('coast')
-    expect(angleGap(w!.angle!, deg(60))).toBeLessThan(1e-9)
+    expect(angleGap(coastAngle(w), deg(60))).toBeLessThan(1e-9)
   })
 
   it('faces a corner when only shoreline edges touch the water (COAST_E: SE and SW)', () => {
     const w = waterForEdges('Coast', { ...none, coastEdges: ['SE', 'SW'] })
-    expect(angleGap(w!.angle!, deg(90))).toBeLessThan(1e-9)
+    expect(angleGap(coastAngle(w), deg(90))).toBeLessThan(1e-9)
   })
 
   it('a coast wins over a river mouth on the same hex', () => {
     expect(waterForEdges('Coast', { seaEdges: ['E'], coastEdges: [], riverEdges: ['W'] })?.kind).toBe('coast')
   })
 
-  it('runs a river out through its first river edge, on any land terrain', () => {
+  it('runs a river through all its river edges, on any land terrain', () => {
     const w = waterForEdges('Forest/jungle', { ...none, riverEdges: ['NW', 'SE'] })
-    expect(w).toEqual({ kind: 'river', angle: expect.closeTo(deg(240), 9) })
+    expect(w).toEqual({ kind: 'river', edges: ['NW', 'SE'] })
   })
 
   it('gives no water to a dry hex, and a random-side coast to an Ocean hex', () => {
