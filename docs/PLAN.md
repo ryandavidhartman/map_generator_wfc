@@ -78,7 +78,8 @@ table) is referenced only by its test. Reuse `EncounterRoller`.
 **5. No repeated room text.** Reroll once on an exact match. The book allows repeats; this is
 only for variety.
 
-**6. Site maps for Tombs, Ruins and Temples.** Tower, Keep, Settlement and Camp are done. Tomb
+**6. Site maps for Tombs, Ruins and Temples.** Brief, with the open decisions:
+[`brief-site-maps.md`](brief-site-maps.md). Tower, Keep, Settlement and Camp are done. Tomb
 and Ruins are dungeon types drawn by `DungeonMapSvg.tsx` in the shared classic-blue style.
 "Temple" is both `Temple (oracle)` (d200 84-87, a Shrine, which has no map today, so it needs a
 new one) and `Ruins (temple)` (a Ruins dungeon); user: both (2026-11-01). Confirm style-only
