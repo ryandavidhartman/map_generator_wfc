@@ -53,7 +53,7 @@ describe('applyChunkResult', () => {
   })
 })
 
-// PLAN.md M5: grow 30 chunks along a random walk, with no revealed hex ever changing, and count
+// HISTORY.md M5: grow 30 chunks along a random walk, with no revealed hex ever changing, and count
 // dropped cells (target: none in normal play). Each walk's path depends on every roll made
 // along the way, so a change to what's rolled at reveal (M6's anchors) sends it elsewhere.
 describe('growing the world along a random walk', () => {

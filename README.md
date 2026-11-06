@@ -5,9 +5,11 @@ is generated with Wave Function Collapse, so coasts, rivers and roads join up ac
 Clicking into a hex opens its terrain, danger, encounter rollers and generated sites
 (dungeons, settlements, towers, keeps, camps, shrines and rifts), each with its own map.
 
-**Status:** early development. This repo is currently a fork of the OSR Hex Crawl Generator
-(the hex detail and site generators). The WFC overland map is being added. See
-[`docs/PLAN.md`](docs/PLAN.md) for the design and milestones.
+**Status:** playable. The WFC overland map (2D and 3D views, fog of war, chunk growth as the
+party explores, GM terrain editing, campaign files and PNG exports) is built on a fork of the
+OSR Hex Crawl Generator (the hex detail and site generators). See
+[`docs/PLAN.md`](docs/PLAN.md) for the design and the open punch list, and
+[`docs/HISTORY.md`](docs/HISTORY.md) for how it was built.
 
 ## Getting started
 

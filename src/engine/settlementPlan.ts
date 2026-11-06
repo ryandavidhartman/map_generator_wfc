@@ -210,8 +210,8 @@ export function waterForMapHex(hex: AxialCoord & { terrain: Terrain }, hexes: Re
 //   so a tile whose water only touches a corner faces that corner). A tile's water edges are
 //   always contiguous, so they can't cancel out the way opposite Ocean neighbors could;
 // - otherwise river edges: a river leaving through the first of them (the town map's river is
-//   still one straight band; punch-list 1b will bend it along both edges);
-// - otherwise no water. (Lakes are punch-list 1c.)
+//   still one straight band; PLAN.md punch-list item 2 will bend it along both edges);
+// - otherwise no water. (Lakes are PLAN.md punch-list item 2.)
 // Angles are on the town map's frame (radians, y down): pointy-top edge NE is -60°, E 0°, ...
 const EDGE_ANGLE_DEG: Record<HexDir, number> = { NE: -60, E: 0, SE: 60, SW: 120, W: 180, NW: 240 }
 
