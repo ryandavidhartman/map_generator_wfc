@@ -378,159 +378,124 @@ spread between worlds is wide by design: some are wetter, colder or more mountai
 
 ## Architecture
 
+This section covers structure and flow: what lives where, how data moves, and how the views
+draw. Tuning values, sizes and visual details live in the code (constants and file headers)
+and in HISTORY.md. Every claim here is checked against the code in
+[`ARCHITECTURE-CHECKLIST.md`](ARCHITECTURE-CHECKLIST.md); update both together.
+
 ```
 src/
   data/        ← from map_generator: tables (Terrain gained Coast and Hills; 3d6 start table)
   engine/      ← from map_generator: sites, encounters, treasure; anchor settlements in
                  generateHex.ts, tile-edge water in settlementPlan.ts
-  wfc/         ← ported from hex-map-wfc, TypeScript, no Three.js imports
-    tiles.ts          the 34 active tiles, edges, levels (TILE_LIST, TILE_TYPE; from HexTileData.js)
+  wfc/         ← ported from hex-map-wfc
+    tiles.ts          the tile set (TILE_LIST): edges and levels per tile
     cube.ts           cube-coordinate helpers
-    rules.ts          edge levels, bitset adjacency lookups, findMismatches
+    rules.ts          edge matching and adjacency lookups, findMismatches
     solver.ts         HexWFCSolver: propagation, backtracking, unfixing
-    recovery.ts       solveRegion: Local-WFC and drop recovery, with isLocked
-    chunks.ts         chunk lattice, solveChunk, chunkRng (per-chunk seeds), tilesNearChunk
-                      (a worker request's context); firstChunkSeeds is test-only
-    rng.ts            mulberry32, mixSeed
+    recovery.ts       solveRegion: recovery (Local-WFC, drops), with isLocked
+    chunks.ts         the chunk lattice, solveChunk, per-chunk Rng
+    rng.ts            the seeded generator
   world/       ← the bridge between tiles and game hexes
-    noise.ts          seeded simplex noise, fBm
-    fields.ts         continent / elevation / moisture / temperature, placeWorld, fieldsFor
+    noise.ts          seeded noise
+    fields.ts         continent / elevation / moisture / temperature fields, placeWorld
     masks.ts          zones and per-cell allowed tiles
-    solve.ts          solveWorldChunk (masks, lookahead, river loops), world rules
+    solve.ts          solveWorldChunk (masks, lookahead, river loops), the world's rules
     rivers.ts         river-loop detection and breaking
-    terrain.ts        tile + fields → Terrain, river/road/coast/sea edges, lakes (deriveHexGeo)
-    stats.ts          measureWorld, growWorld (for tests and `npm run sim`)
-    protocol.ts       worker request/response
-    solver.worker.ts  the Web Worker (just calls protocol.ts)
+    terrain.ts        deriveHexGeo: tile + fields → terrain, edges, lake
+    stats.ts          world measurements (for tests and `npm run sim`)
+    protocol.ts       worker request and response
+    solver.worker.ts  the Web Worker
     client.ts         WfcClient: promise wrapper around the worker
-    hexTiles.ts       saved tiles ([type, rotation, level] by hex id) <-> TileStore, geoAt
-    startWorld.ts     createStartingWorld: place, solve 7 chunks, find the start hex; seedFromText
     workerSolver.ts   the app's ChunkSolver, backed by one shared worker
-    growth.ts         chunksToGrow, lockedKeys, applyChunkResult
+    hexTiles.ts       saved tiles by hex id, geoAt
+    startWorld.ts     createStartingWorld
+    growth.ts         chunksToGrow, applyChunkResult
     anchors.ts        settlement anchors
-    pin.ts            GM terrain edits: pin a tile, re-solve around it
-  render2d/    ← the overland 2D map, pointy-top
-    HexGridSvg.tsx    pan/zoom map; player view or GM view
-    HexTile.tsx       one hex: fill, coast water, lake, river, road, fog/dimming, markers
-    tileShapes.ts     river/road/coast SVG paths from the tile's edges
-    mapData.ts        shared map geometry (hex size, per-hex geo, coordinates)
+    pin.ts            GM terrain edits (pinHex)
+  render2d/    ← the overland 2D map (SVG)
+    HexGridSvg.tsx    the pan/zoom map, player or GM view
+    HexTile.tsx       one hex, drawn from saved data
+    tileShapes.ts     river, road and coast paths from a tile's edges
+    mapData.ts        shared map geometry
     poiIcons.ts       POI glyphs
-    MapExportSvg.tsx, exportPng.tsx   player and GM PNG exports (exportPng is lazy-loaded)
-  render3d/    ← the overland 3D map, lazy-loaded
-    layout.ts         pure: placement, looks, instance-color encoding, tileDraws
-    scenery.ts        pure: decorations and POI models per hex (SCENERY_TUNING)
-    tileMaterial.ts   TSL tile material (palette blend, tints, fog, render modes)
+    MapExportSvg.tsx, exportPng.tsx   PNG exports
+  render3d/    ← the overland 3D map (Three.js), lazy-loaded
+    layout.ts         pure: tile placement and looks (tileDraws)
+    scenery.ts        pure: decorations and POI models per hex
+    tileMaterial.ts   the tile material
     MapScene.ts       renderer, camera, controls, meshes, markers, picking
     water.ts, wavesMask.ts, postFX.ts   water, coastal waves, screen effects
-    ThreeMapView.tsx  React wrapper (owns the canvas and the scene's lifecycle)
-  hexgrid/     ← map_generator's site map renderers (Dungeon/Settlement/…), colors.ts, and
-                 hexMath.ts (pointy-top)
-  state/       ← mapReducer + MapContext (state, dispatch, saving), useChunkGrowth, testWorld
-  persistence/ ← localStorage.ts: save and load, and campaign-file JSON (campaignToJson,
-                 campaignFromJson, campaignFileName)
-  components/, routes/  ← from map_generator, plus the Campaign menu, start dialog and
-                 useCampaignFile (the file loader)
+    ThreeMapView.tsx  React wrapper: owns the canvas and the MapScene
+  hexgrid/     ← map_generator's site map renderers, colors.ts, hexMath.ts
+  state/       ← mapReducer, MapContext, useChunkGrowth, testWorld (test fixture)
+  persistence/ ← localStorage.ts: the save and campaign files
+  components/, routes/  ← from map_generator, plus the Campaign menu and start dialog
+  App.tsx      ← routes, the 2D/3D and GM view toggles, lazy-loads the 3D view
 ```
 
-- **Layering:** `wfc/` knows nothing about the world (its only import from outside is the `Rng`
-  type from `engine/dice`); `world/` adds fields, masks and the worker protocol (a request
-  carries `WorldParams`). Both are pure TypeScript and testable headless in
-  Vitest; the only browser APIs are in `world/client.ts` (creates the `Worker`, injectable as
-  a `WorkerLike` for tests) and `world/solver.worker.ts` (`self`). Outside `wfc/`, `world/`
-  imports only `Terrain` and `ALL_TERRAINS` from `data/tables` and the `Rng` type. Only `render3d/` imports Three.js, and only `MapScene.ts`, `tileMaterial.ts`,
-  `water.ts`, `wavesMask.ts` and `postFX.ts` within it.
-- **Hex orientation:** pointy-top throughout, as hex-map-wfc's models are built (map_generator
-  was flat-top). The site generators that take a direction (settlement water side) map tile
-  edges (NE, E, SE, SW, W, NW) to their own angles, covered by tests.
-- Routes: `/` (overland, 2D/3D toggle), `/hex/:hexId` (the hex detail page), and `/poi/:n`
-  (the POI review page). That page has no map hex, so an Ocean or Coast settlement there gets a
-  random water side (punch-list item 2).
+- **Layering:** `wfc/` knows nothing about the world; `world/` builds on it. Both are plain
+  TypeScript with no Three.js or React, tested headless in Vitest. Only `render3d/` imports
+  Three.js (CLAUDE.md lists the files), and it's lazy-loaded, so Three.js stays out of the
+  main bundle.
+- **Hex orientation:** pointy-top throughout, as hex-map-wfc's models are built. map_generator
+  was flat-top; the settlement map's water side maps tile edges to its own angles.
+- **Routes:** `/` (the overland map), `/hex/:hexId` (the hex detail page) and `/poi/:n` (the
+  POI review page, which has no map hex).
 
 ### Data flow
 
-`MapState` lives in `mapReducer.ts`, provided by `MapContext.tsx`, which also writes the save
-after every change (section 7). The reducer is synchronous, so it can't wait on the worker.
+`MapState` lives in `mapReducer.ts`. `MapContext.tsx` provides it and writes the save after
+every change (section 7). The reducer is synchronous, so it can't wait on the worker.
 
 **Two solve paths:**
 - **In the worker,** for the starting world and chunk growth. The worker keeps no state: each
-  request carries `WorldParams` and the tiles within R + 6 of the chunk center (14 hexes), and
-  the whole recovery loop runs inside it as one synchronous call. The caller dispatches the
-  result.
-- **In the reducer, on the main thread,** for GM edits: `EDIT_HEX` calls `pinHex`, up to about
-  0.7 s for a big edit. That puts the WFC solver in the main bundle too (Three.js stays out).
+  request carries the world params and the tiles near the chunk, and the whole solve runs
+  inside it. The caller then dispatches the result.
+- **In the reducer, on the main thread,** for GM edits: `EDIT_HEX` calls `pinHex`. So the WFC
+  solver is in the main bundle too.
 
-| Action | From | What it does |
+| Action | Dispatched by | What it does |
 |---|---|---|
-| `START_MAP` | start dialog, after `createStartingWorld` in the worker | sets world, 7 chunks and tiles; reveals the start hex (danger level fixed at 1) |
-| `MOVE_PARTY_TO` | 2D/3D map click, or the hex page | into a new hex: reads its terrain from its tile (`geoAt`), then rolls danger and the POI (`generateHexDetails`); into a revealed hex: only moves |
-| `ADD_CHUNK` | `useChunkGrowth`, after a worker solve | applies the chunk's tile updates through `applyChunkResult` |
-| `EDIT_HEX` | the hex page's Edit form | label change, or `pinHex` re-solve (its updates go through `applyChunkResult`) and `tileMismatch` |
-| `LOAD_MAP` | Campaign menu or start screen, after the file is checked | replaces the campaign |
-| `REROLL_HEX` | the hex page | re-rolls danger and the POI, and clears any generated site; an anchor hex stays a settlement (`rollAnchorSettlement`) |
+| `START_MAP` | the start dialog, after `createStartingWorld` | sets the solved world and reveals the start hex |
+| `MOVE_PARTY_TO` | a map click, or the hex page | moves the party; into an unrevealed hex, reveals it and rolls its game data |
+| `ADD_CHUNK` | `useChunkGrowth` | applies a grown chunk's tiles |
+| `EDIT_HEX` | the hex page's Edit form | edits a hex; a terrain change may reshape its tile (`pinHex`) |
+| `REROLL_HEX` | the hex page | re-rolls danger and the POI; an anchor hex stays a settlement |
+| `LOAD_MAP` | the Campaign menu and start screen | replaces the campaign with a checked file |
 | `SELECT_HEX`, `GENERATE_SITE`, `REROLL_SITE`, `NEW_MAP` | as in map_generator | |
 
-- **Chunk growth loop** (`src/state/useChunkGrowth.ts`, on the overland screen): on every
-  state change (so after every move and every chunk that lands), and again after each solve
-  finishes, take the nearest unsolved chunk within `GROW_RADIUS`, solve it in the worker,
-  dispatch `ADD_CHUNK`. One solve at a time, so each starts from the latest
-  tiles. A chunk that fails is skipped for the session (logged). The toolbar shows "Extending
-  the map…" while a chunk solves.
-- **Revealed hexes are guarded twice:** `isLocked` inside the solver (section 1), and
+- **Chunk growth** (`useChunkGrowth`, on the overland screen): whenever the state changes, the
+  nearest unsolved chunk near the party is solved in the worker and dispatched. One solve at a
+  time, so each starts from the latest tiles. A chunk that fails is skipped for the session.
+- **Revealed hexes are guarded twice:** `isLocked` inside the solver (section 1), then
   `applyChunkResult`, which drops any update to a revealed hex before it reaches the state.
-  Both chunk growth (`ADD_CHUNK`) and GM edits (`EDIT_HEX`, with the edited hex itself exempt)
-  go through it.
-- **Determinism:** a chunk's solve depends only on the world seed, the chunk and the tiles
-  around it (per-chunk Rng). Scenery and lakes come from the world seed and the hex, so
-  revealing or re-solving never reshuffles a hex's trees. Terrain, anchors, edges and lakes
-  are derived from the tile when needed and never saved; the save holds the world params, the
-  chunk list, the tiles, the revealed hexes' game data, and the party and selected hexes
-  (section 7).
+  `ADD_CHUNK` and `EDIT_HEX` both go through it (`EDIT_HEX` exempts the edited hex).
+- **Saved versus derived:** edges, lakes and anchors are derived from the tile when needed,
+  never saved. Terrain is derived too, except that a revealed hex saves its terrain with its
+  game data, since a GM edit can make it a label over another tile shape (section 6). Section 7
+  lists what the save holds.
+- **Deterministic:** a grown chunk's solve depends only on the world params, the chunk and the
+  tiles around it (per-chunk Rng from the world seed), and a hex's scenery only on the world
+  seed and the hex, so revealing or redrawing never reshuffles a hex's trees. GM edits re-solve
+  with an ordinary random roll.
 
 ### Rendering
 
-**2D** (`render2d/`): SVG. `HexTile` draws one hex from its saved data (terrain fill, danger
-border, and from the tile: rivers, dashed roads, lake ovals and the water side of coast
-hexes). A river or road with two edges is a curve between them; ends and junctions are
-straight spokes from each edge to the center (`linePath`, tileShapes.ts). Unrevealed hexes are
-dimmed in GM view. The map, the GM view and the PNG exports all use it. The view
-opens 16 hexes wide on the party and zooms from 4 to 80 hexes.
-
-**3D** (`render3d/`): imperative Three.js inside one lazy-loaded React component.
-`ThreeMapView` takes only `gmView`, reads the map state from context, and dispatches the same
-actions and routes as the 2D view: a click moves the party; a double-click opens a revealed
-hex's page (and selects it), or moves the party onto an unrevealed one; a drag doesn't move
-it. Three.js 0.183.2 with `WebGPURenderer`, which falls back to WebGL2.
-- **Meshes:** two BatchedMeshes: one for the tiles (from the GLB, plus fills under raised
-  tiles) and one for the decorations and KayKit POI models, planned per hex by `scenery.ts`.
-  The party pawn, the gems, and the camp and rift models are ordinary meshes.
-- **One tile material, three modes** (normal, true color for the coast mask, water mask),
-  switched by a uniform. The palette blends toward snow from level 2 (Hills half, Mountains
-  full). Biome tints recolor only the palette's grass swatch, so roads, rivers, sand and water
-  keep their colors; Desert/arctic is sand when warm and snow when cold.
-- **Fog:** in player view, unrevealed tiles are flat, unlit grey silhouettes (land mid grey,
-  sea dark grey, the party's unrevealed neighbors lighter); rivers don't show, coastlines and
-  relief do; no scenery. GM view draws them in full color, dimmed, except the party's
-  unrevealed neighbors, which aren't dimmed (`layout.ts`).
-- **Water** (`water.ts`, `wavesMask.ts`) covers the map's bounds and follows them as the map
-  grows. The coast masks are drawn 3 frames after the tiles change: drawn at once (before the
-  scene's first render) they come out empty, with no waves.
-- **Frame order:** scene (with the POI models), then post-processing (`postFX.ts`: AO, depth
-  of field, vignette, grain, always on, on WebGPU and the WebGL2 fallback alike), then the
-  markers as an alpha-blended overlay, so AO and blur don't touch them. Markers: a white pawn
-  for the party, a yellow gem on POIs without a model, danger-colored rings on revealed hexes,
-  a white ring on the selected one, a red ring on mismatched hexes in GM view.
-- **Render loop:** the water moves, so the map draws every frame, except with the OS "reduce
-  motion" setting, where it draws only when something changes. The water then doesn't move
-  between frames, but its shader runs on Three.js's clock, so each redraw shows it at a later
-  point in its animation (it jumps rather than freezing).
-- **Growth:** new tiles drop into place, rippling out from the middle of the new area, and their
-  scenery appears when they land (not with "reduce motion"). The camera centers on the party
-  only on the first build, so growth doesn't move the view.
-- Controls: left-drag pans, right-drag rotates, wheel or middle-drag zooms, tilt limited; on
-  touch, one finger rotates and two zoom and pan.
-- Size (production build, 2026-11-05): the 3D chunk is 975 kB (273 kB gzipped) and loads only
-  when the 3D view opens. The main bundle is 532 kB (172 kB gzipped), with the WFC solver and
-  no Three.js; the worker is 26 kB.
+- **2D:** `HexTile` draws one hex from saved data. The map, the GM view and both PNG exports
+  all draw with it, so they always match.
+- **3D:** `ThreeMapView` is a thin React wrapper; `MapScene` is imperative Three.js that owns
+  the renderer, camera, controls, meshes and picking. The wrapper reads the map state from
+  context and dispatches the same actions as the 2D map. Three.js's `WebGPURenderer` falls back
+  to WebGL2 on its own.
+- **Meshes and material:** the tiles are one BatchedMesh and the decorations (with the POI
+  models) another; one tile material serves the normal view and the two masks the water needs,
+  switched by a uniform. Fog and GM dimming are per-tile looks set in `layout.ts`.
+- **Each frame:** the scene, then post-processing (`postFX.ts`). The markers are rendered
+  separately and blended in after ambient occlusion, depth of field and the water, so those
+  don't touch them; the vignette and grain still apply over them.
+- **When it draws:** every frame, for the moving water, unless the OS "reduce motion" setting
+  is on; then only when something changes.
 
 ## Licensing
 
@@ -558,7 +523,7 @@ it. Three.js 0.183.2 with `WebGPURenderer`, which falls back to WebGL2.
 - **WebGPU support.** Safari and Firefox support varies. The 2D view is always available, and
   the WebGL2 fallback works (tested headless); the user checked WebGPU in Chrome.
 - **Bundle size.** Three.js plus a 2.5 MB GLB plus textures, kept out of the main bundle by
-  lazy-loading `render3d/` (the 3D chunk is 975 kB, 273 kB gzipped).
+  lazy-loading `render3d/`.
 - **Tooling limits** from map_generator: Node 20.16 and Vite 6.4 (not 7 or 8), confirmed
   working with Three.js 0.183.2. hex-map-wfc's HTTPS dev server isn't needed: WebGPU works on
   `http://localhost`.

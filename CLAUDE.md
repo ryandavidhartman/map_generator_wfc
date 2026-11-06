@@ -7,7 +7,8 @@ site generators forked from `~/dev/source/map_generator`.
 **Read `docs/PLAN.md` first.** It has the punch list (all open work), the decisions, how the
 system works, and its architecture and data flow. `docs/HISTORY.md` is the M0-M8 build log,
 with the measurements and bug fixes; code comments citing "PLAN.md M5" and the like mean
-entries there.
+entries there. `docs/ARCHITECTURE-CHECKLIST.md` ties every claim in PLAN.md's Architecture
+section to code; when a change makes one untrue, update both.
 
 **Status (2026-11-05):** milestones M0-M8 are done and merged; open work is PLAN.md's punch
 list. The suite takes about 25-30 s, mostly the WFC and world tests.
