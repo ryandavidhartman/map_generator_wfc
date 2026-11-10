@@ -438,7 +438,7 @@ edges sent through `waterForEdges`, kept out of saves, the map labeled with tile
   line named the right water and direction for each. Screenshots of the town-maps cases and the
   /poi cases were shown to the user, who tested it and approved ("looks good!", 2026-11-10).
 - The spec's "Later: a true island drawing for towns on Ocean hexes" became punch-list item 14
-  (user, 2026-11-10).
+  (user, 2026-11-10); item 9 since the renumbering below.
 
 ### Item 3: GM planning of unrevealed hexes (2026-11-10, pushed straight to main as 1c35e42 at the user's request)
 
@@ -506,6 +506,28 @@ gained "Planned"; five checklist rows had drifted line numbers; this file's item
 misplaced sentence, and its item 2 and 3 headings gained their commit hashes, the earlier
 branches their PR numbers. README.md's feature list gained GM planning; brief-site-maps.md
 held.
+
+A review of the punch list against the code found every item's claims still true. Claude
+suggested a new order and the user approved it; the user then had the items renumbered so the
+numbers run in order. Old to new: 4 and 5 unchanged, 7 → 6 (tracking, ahead of the site maps since
+only its map markers need them), 9 → 7 (2D Coast color), 6 → 8 (site maps), 14 → 9 (island
+drawing), 10-13 unchanged, 8 → 14 (Mongo). Commits and entries above this one use the old
+numbers. Item 10 now depends on 4 (the roller pattern); the user's inputs are grouped (images
+for 7, 8 and 9; tables for 10, 11 and 12). Item 5 was made specific: the detail line, all sites
+that roll rooms with `rollRoomContent`, and the reroll before the treasure roll. The user then
+settled its two open points: all three sites (dungeons, Towers, Keeps), and reroll once rather
+than dealing each line once like a deck, which would flatten the 2d6 tables' odds.
+
+An audit of the documents cited in code comments: every `docs/` path either exists here or is
+one of six map_generator documents that weren't copied (48 citations); CLAUDE.md now says
+where those live, and where the monster tables' source (`combined-monsters.md`) is.
+`encounterTables.ts`'s header now names map_generator's docs directly, and its Tomb comment
+no longer blames "the book" (the tables are this project's own text). Four Tower/Keep comments
+said "CLAUDE.md's punch list" for map_generator's; `scripts/townMaps.ts` cited a CLAUDE.md
+section that had been renamed.
+
+README.md was rewritten around a "What it does" list. It had said every site kind gets its own
+map, but Shrines and Rifts have none; it also gained `npm run preview` and the `/poi/<n>` page.
 
 ## Risks, as written during the build
 

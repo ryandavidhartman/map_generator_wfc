@@ -4,8 +4,9 @@
 // conversation and routing table. Keep's identity is a fortified compound: a walled courtyard
 // around a multi-floor keep building.
 //
-// Spec (floors added 2026-10-31 for the keep map overhaul — reference image in CLAUDE.md's
-// punch list; replaces the old single-floor hub-and-spoke model and its fixed room rects):
+// Spec (floors added 2026-10-31 for the keep map overhaul — reference image in
+// map_generator's CLAUDE.md punch list, snapshot in docs/reference/map_generator-CLAUDE.md;
+// replaces the old single-floor hub-and-spoke model and its fixed room rects):
 // - Ground floor: the Courtyard (outdoors, always room #1) plus the building's ground-floor
 //   rooms. Their count reuses the Size roll via keepRoomCountRangeForSize (Small 3-4, Medium
 //   5-6, Large 7-8); the first three are named Hall, Barracks, Armory, the rest are generic.

@@ -1,6 +1,6 @@
-# Brief: site maps for Tombs, Ruins and Temples (punch-list item 6)
+# Brief: site maps for Tombs, Ruins and Temples (punch-list item 8)
 
-A self-contained brief for whoever builds PLAN.md's punch-list item 6. Written 2026-11-05.
+A self-contained brief for whoever builds PLAN.md's punch-list item 8. Written 2026-11-05.
 **Status: decisions recorded (2026-11-05); waiting on the reference images,** Tomb's first
 (D1). Several decisions are "decide from the image": when an image arrives, propose the answer
 from it and confirm with the user before code. Don't guess an open point: ask the user, then
@@ -68,8 +68,8 @@ user before writing code. A pasted image has no URL, so this description is the 
 ## Read first
 
 1. `CLAUDE.md`: the project rules (auto-loaded by Claude Code; read it yourself otherwise).
-2. `docs/PLAN.md`, punch-list item 6, and the items it affects: 7 (tracking will add markers to
-   these maps) and 8 (Mongo).
+2. `docs/PLAN.md`, punch-list item 8, and the items it affects: 6 (tracking will add markers to
+   these maps) and 14 (Mongo).
 3. `docs/reference/map_generator-CLAUDE.md`, a snapshot of map_generator's notes. Its
    architecture notes for sites still apply here:
    - **Site kinds table** (around line 398): generator, layout and renderer per kind.
@@ -96,7 +96,7 @@ user before writing code. A pasted image has no URL, so this description is the 
   add saved fields or change a generator's random rolls (D8). Old saves must still open and
   draw.
 - **Tables are transcribed verbatim.** If a kind needs new table content, the user supplies it.
-- **Keep the data attributes** that tracking (item 7) will hook into: rooms carry
+- **Keep the data attributes** that tracking (item 6) will hook into: rooms carry
   `data-room-id`, features `data-feature-id`.
 - **Don't name any other game, publisher or rulebook** in code, comments or docs, except Basic
   Fantasy where its license requires attribution.
@@ -130,9 +130,9 @@ user before writing code. A pasted image has no URL, so this description is the 
 
 For each kind: the user has approved its screenshots against the reference image; the tests
 pass; Cave and Deep tunnels draw as before; an old save's site of that kind still opens and
-draws; and this brief and PLAN.md's item 6 say what was built and which decisions it followed.
+draws; and this brief and PLAN.md's item 8 say what was built and which decisions it followed.
 
 ## Out of scope
 
-Tracking markers on the maps (item 7), Mongo (item 8), and encounter rollers for these sites
+Tracking markers on the maps (item 6), Mongo (item 14), and encounter rollers for these sites
 (items 4 and 10).

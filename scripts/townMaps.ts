@@ -6,7 +6,7 @@
 // in --tiles), and every water tile in TILE_LIST plus RIVER_END ending in a lake (or just the
 // --tiles listed) at --rotation, with its edges sent through waterForEdges exactly
 // as a real hex with that tile would. --png also screenshots the page with headless Chromium
-// (see CLAUDE.md, "2D and town-map checks") into town-maps.png next to it.
+// (see CLAUDE.md, "Testing and checks") into town-maps.png next to it.
 //
 // The town (districts, seat, population) comes from generateSettlement with a seeded rng, so the
 // same --type and --seed give the same town in every case and only the water changes.

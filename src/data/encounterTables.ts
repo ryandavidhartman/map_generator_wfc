@@ -1,8 +1,10 @@
 // d100 encounter tables. The 21 terrain/district/dungeon/Tavern tables are original text written
-// for this project (source of truth: docs/original-text-encounters.md — edit there first, then
-// mirror here). Two more tables, 'OSR Urban (Daytime)' and 'OSR Urban (Nighttime)', are
-// transcribed from the Basic Fantasy compilation's (core rules + Field Guide) Appendix C (docs/osr-appendix-cde-source.txt, ~lines
-// 656-817; OSR integration round 2, Phase 5 — see docs/plan-osr-integration.md). Each table is
+// for this project (source of truth: map_generator's docs/original-text-encounters.md, which
+// wasn't copied into this repo — edit there first, then mirror here). Two more tables,
+// 'OSR Urban (Daytime)' and 'OSR Urban (Nighttime)', are transcribed from the Basic Fantasy
+// compilation's (core rules + Field Guide) Appendix C (map_generator's
+// docs/osr-appendix-cde-source.txt, ~lines 656-817; OSR integration round 2, Phase 5 — see
+// map_generator's docs/plan-osr-integration.md). Each table is
 // written as d100 ranges (e.g. 2-3) and expanded to a full 100-entry array at module load; "00"
 // means a roll of 100. The two OSR tables condense each row's "Encounter" + "# Encountered &
 // Notes" columns into one display string. Rows that point at Appendix C's excluded Red-Light
@@ -1376,9 +1378,9 @@ export const TERRAIN_TO_ENCOUNTER_KEYS: Record<Terrain, EncounterTableKey[]> = {
   Mountain: ['Mountain'],
 }
 
-// Dungeon Site Type -> encounter table key. The book's appendix has no dedicated "Tomb"
-// table, so Tomb falls back to Ruins (closest tonal match — both are humanoid-built,
-// undead-leaning sites) rather than leaving tombs with no encounter table at all.
+// Dungeon Site Type -> encounter table key. This project's original-text tables (see the
+// header) have no "Tomb" table, so Tomb falls back to Ruins (closest tonal match — both are
+// humanoid-built, undead-leaning sites) rather than leaving tombs with no encounter table.
 export const SITE_TYPE_TO_ENCOUNTER_KEY: Record<SiteType, EncounterTableKey> = {
   Cave: 'Cave',
   Tomb: 'Ruins',

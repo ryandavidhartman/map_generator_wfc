@@ -6,7 +6,7 @@
 // happens to land.
 //
 // Spec (multi-room floors added 2026-10-31 for the floor-plan map overhaul — reference image
-// in CLAUDE.md's punch list):
+// in map_generator's CLAUDE.md punch list, snapshot in docs/reference/map_generator-CLAUDE.md):
 // - Level count reuses the Size roll (siteSizeForD6) remapped via towerLevelRangeForSize,
 //   rather than inventing a second size axis.
 // - Ground floor always has exactly 2 rooms: the entry hall (holds the stair up) and a guard

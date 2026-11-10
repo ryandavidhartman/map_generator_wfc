@@ -19,62 +19,75 @@ by simulation.
 
 All open work, in one suggested order. **Waiting on** says who moves next: the user (a
 decision, a reference image or table content) or Claude (ready to build). Sizes are rough:
-S a few hours, M a day or two, L several days.
+S a few hours, M a day or two, L several days. Things the user supplies come in groups:
+reference images for 7, 8 and 9, and tables for 10, 11 and 12, so each group can be
+gathered in one sitting. Items were renumbered on 2026-11-10; HISTORY.md's "Docs audit"
+entry maps the old numbers to the new.
 
 | # | Item | Area | Waiting on | Depends on | Size |
 |---|---|---|---|---|---|
 | 4 | Encounter rollers for dungeons, and the Tavern table | Sites | Claude: ready | | S |
-| 5 | No repeated room text within one dungeon | Sites | Claude: ready | | S |
-| 6 | Site maps for Tombs, Ruins and Temples | Sites | User: a reference image per kind | | L |
-| 7 | Site-interaction tracking | Sites | User: answer the scope questions | 6 (map markers only) | L |
-| 8 | Mongo backend and multiple campaigns | App | User: choose hosting | 6, 7 | L |
-| 9 | 2D Coast color | 2D map | User: a reference image | | S |
-| 10 | Encounter tables for Tower, Shrine, Rift, Keep, Camp | Sites | User: the tables | | M |
+| 5 | No repeated room text within one site | Sites | Claude: ready | | S |
+| 6 | Site-interaction tracking | Sites | User: answer the scope questions (then buildable while 8 waits) | 8 (map markers only) | L |
+| 7 | 2D Coast color | 2D map | User: a reference image | | S |
+| 8 | Site maps for Tombs, Ruins and Temples | Sites | User: a reference image per kind | | L |
+| 9 | Island drawing for towns on Ocean hexes | Sites | User: a reference image | | M |
+| 10 | Encounter tables for Tower, Shrine, Rift, Keep, Camp | Sites | User: the tables | 4 (the roller pattern) | M |
 | 11 | Road encounter tables | Overland map | User: the tables | | S-M |
 | 12 | Camp central-feature table | Sites | User: the table | | S |
 | 13 | NPC activity that fits the profession | Sites | User: only if it bothers them in play | | S |
-| 14 | Island drawing for towns on Ocean hexes | Sites | User: a reference image | | M |
+| 14 | Mongo backend and multiple campaigns | App | User: choose hosting | 6, 8 | L |
 
 ### Details
 
 **4. Encounter rollers for dungeons, and the Tavern table.** The Cave, Deep Tunnels, Ruins and
 Tavern d100 tables exist, but no screen uses them. `DungeonSiteView` has no encounter roller;
-`SITE_TYPE_TO_ENCOUNTER_KEY` (encounterTables.ts; Tomb uses Ruins, since the book has no Tomb
-table) is referenced only by its test. Reuse `EncounterRoller`.
+`SITE_TYPE_TO_ENCOUNTER_KEY` (encounterTables.ts; Tomb uses Ruins, since this project's
+encounter tables have no Tomb table) is referenced only by its test. Reuse `EncounterRoller`.
 
-**5. No repeated room text.** Reroll once on an exact match. The book allows repeats; this is
-only for variety.
+**5. No repeated room text.** Within one site, no two rooms get the same Room Type detail
+line (the d6 or 2d6 sub-table result from `rollRoomContent`, roomContent.ts). On an exact
+match, reroll the detail once and keep the second roll even if it repeats too, so a site with
+more rooms of a type than its table has lines still repeats. The book allows repeats; this is
+only for variety. Covers dungeons, Towers and Keeps, since all three roll rooms with
+`rollRoomContent`. User, 2026-11-10: all three sites, and reroll once rather than a "deck"
+that deals each line once before any repeats (the deck would flatten the 2d6 tables' odds).
+The reroll must come before the treasure roll, because a Treasure room's "Watched by a
+monster" detail doubles its treasure. Sites are saved once generated, so only new sites change.
 
-**6. Site maps for Tombs, Ruins and Temples.** Brief, with the open decisions:
-[`brief-site-maps.md`](brief-site-maps.md). Tower, Keep, Settlement and Camp are done. Tomb
-and Ruins are dungeon types drawn by `DungeonMapSvg.tsx` in the shared classic-blue style.
-"Temple" is both `Temple (oracle)` (d200 84-87, a Shrine, which has no map today, so it needs a
-new one) and `Ruins (temple)` (a Ruins dungeon); user: both (2026-11-01). Confirm style-only
-vs. layout per kind. Before tracking, whose map markers would otherwise be built twice, and
-before Mongo, since a layout change alters generated data.
-
-**7. Site-interaction tracking.** A typed per-site event log at room or feature level (monster
+**6. Site-interaction tracking.** A typed per-site event log at room or feature level (monster
 defeated, treasure looted, NPC killed/recruited/talked to, door forced), not freeform notes,
 so a revisited site reflects what the party did. Triggered by party actions, not a GM
 "advance time" button. Scope questions: which event types; which site kinds (dungeons
 first?); how events show (contents marked cleared, or a per-room log); undo; what Reroll Site
-does to a log. Everything but the map markers can be built before item 6. Before Mongo,
-because it changes the saved schema.
+does to a log. Everything but the map markers can be built before item 8, so it's ordered
+ahead of 8, whose reference images may take a while. Before Mongo, because it changes the
+saved schema.
 
-**8. Mongo backend and multiple campaigns.** Reuses the user's Atlas cluster with a new
-database. Open: sharing TypeScript types between client and server (two tsconfigs,
-unverified), and hosting with an SPA route fallback. Less urgent than it was: a 7-chunk
-campaign saves as about 26 kB of the ~5 MB localStorage, and Save to file moves a campaign
-between browsers. Moves up if multi-device play is needed.
-
-**9. 2D Coast color.** The land part of a shore hex is filled with Coast's blue (`#4a90c4`,
+**7. 2D Coast color.** The land part of a shore hex is filled with Coast's blue (`#4a90c4`,
 `hexgrid/colors.ts`), so up close it reads like shallow water beside the drawn sea. Noticed by
 Claude in the M3 browser check; the user kept it as an item on 2026-11-05. A land color, or the
 neighboring biome's, would separate land from water.
 
+**8. Site maps for Tombs, Ruins and Temples.** Brief, with the open decisions:
+[`brief-site-maps.md`](brief-site-maps.md). Tower, Keep, Settlement and Camp are done. Tomb
+and Ruins are dungeon types drawn by `DungeonMapSvg.tsx` in the shared classic-blue style.
+"Temple" is both `Temple (oracle)` (d200 84-87, a Shrine, which has no map today, so it needs a
+new one) and `Ruins (temple)` (a Ruins dungeon); user: both (2026-11-01). Confirm style-only
+vs. layout per kind. Before tracking's map markers (item 6), which would otherwise be built
+twice, and before Mongo, since a layout change alters generated data.
+
+**9. Island drawing for towns on Ocean hexes.** A settlement on an Ocean hex (a small island)
+gets a coast on one random side of its town map today (`waterForEdges` returns a coast with no
+angle; the plan picks one from its seed). This draws it as an island instead: water all round,
+the town on the land in the middle. From item 2's spec ("Later: a true island drawing for towns
+on Ocean hexes"); the user put it on the list on 2026-11-10. A new look, so per the visual-change
+rule it starts from a reference image (Claude's reading of the rule; the user hasn't said).
+To settle: how much land around the town, and whether it keeps piers and a harbor.
+
 **10. Encounter tables for Tower, Shrine, Rift, Keep and Camp.** None exist yet. Waits on the
-tables from the user (transcribed verbatim); then give each site view an `EncounterRoller`, as
-item 4 does for dungeons.
+tables from the user (transcribed verbatim); then give each site view an `EncounterRoller`,
+following the pattern item 4 sets for dungeons (so after item 4).
 
 **11. Road encounter tables.** When the party is on a road hex, roll on road encounter
 tables instead of the terrain's (user, 2026-11-05). Waits on the tables from the user, since
@@ -88,13 +101,11 @@ from the user (transcribed verbatim).
 **13. NPC activity tier.** `npcTables.ts`'s 1d5 tier ignores profession (e.g. "Dwarf Labourer
 — Infirm").
 
-**14. Island drawing for towns on Ocean hexes.** A settlement on an Ocean hex (a small island)
-gets a coast on one random side of its town map today (`waterForEdges` returns a coast with no
-angle; the plan picks one from its seed). This draws it as an island instead: water all round,
-the town on the land in the middle. From item 2's spec ("Later: a true island drawing for towns
-on Ocean hexes"); the user put it on the list on 2026-11-10. A new look, so per the visual-change
-rule it starts from a reference image (Claude's reading of the rule; the user hasn't said).
-To settle: how much land around the town, and whether it keeps piers and a harbor.
+**14. Mongo backend and multiple campaigns.** Reuses the user's Atlas cluster with a new
+database. Open: sharing TypeScript types between client and server (two tsconfigs,
+unverified), and hosting with an SPA route fallback. Less urgent than it was: a 7-chunk
+campaign saves as about 26 kB of the ~5 MB localStorage, and Save to file moves a campaign
+between browsers. Moves up if multi-device play is needed.
 
 ### Closed, and not planned
 
@@ -105,7 +116,7 @@ the open question of whether anchors replace or add to the d200 (add, M6), and t
 in 3D (grey silhouettes, M4).
 Item 3, GM planning of unrevealed hexes, was finished 2026-11-10 (section 6).
 Map_generator's 1b and 1c became item 2 (1b's river code was ported on 2026-11-06; item 2
-finished 2026-11-10, see HISTORY.md); its "later" island drawing is item 14.
+finished 2026-11-10, see HISTORY.md); its "later" island drawing is item 9.
 
 Not planned: a turn-clock state machine, a full procedural dungeon crawler, NPC adventuring
 parties, combat stat blocks (name and flavor only), undo.
@@ -126,7 +137,7 @@ As built. The original 2026-11-04 table is in HISTORY.md; the dates say when eac
 | Danger | **The reveal-time rule stays** (2026-11-04). A hex's `dangerLevel` is computed when it's revealed, from its revealed neighbors. |
 | GM editing | **Edit plus local re-solve** (2026-11-04; scope and fallback 2026-11-05). The GM changes a hex's terrain; WFC re-solves the unrevealed, unplanned hexes within 2-4 to fit it, else the nearest shape that fits is used and the hex is flagged. **Planning unrevealed hexes** (2026-11-10, item 3): terrain, danger and point of interest, used at reveal; planned hexes are locked like revealed ones; opened from GM view; solved hexes only. |
 | 3D look | **Grey fog silhouettes; scenery follows terrain; buildings only on POI hexes; all four screen effects** (2026-11-05). Camera: hex-map-wfc's orbit controls, tilt limited. |
-| Saving | **localStorage: world seed, solved tiles, per-hex game data** (2026-11-04), plus save to / load from a file and player and GM PNG exports (2026-11-05). Mongo is punch-list item 8. |
+| Saving | **localStorage: world seed, solved tiles, per-hex game data** (2026-11-04), plus save to / load from a file and player and GM PNG exports (2026-11-05). Mongo is punch-list item 14. |
 | Town-map water | **Follows the hex's tile** (item 2, 2026-11-06 and 2026-11-10): rivers follow their edges, a river mouth runs into the sea, and a lake gets a curved lakeshore with no piers (user, 2026-11-10). |
 | Roads | **About 10% of land hexes** (2026-11-05; done 2026-11-10 by weighting every road tile ×0.12, the user's choice over sparing anchor tiles). Travel rates on roads are out of scope. |
 

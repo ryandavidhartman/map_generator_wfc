@@ -1,4 +1,5 @@
-// Renders a generated Keep the way the reference does (2026-10-31, see CLAUDE.md's punch list):
+// Renders a generated Keep the way the reference does (2026-10-31, see map_generator's CLAUDE.md
+// punch list, snapshot in docs/reference/map_generator-CLAUDE.md):
 // the ground floor as a walled compound (thick curtain wall, square towers, a gatehouse with a
 // path out, an open courtyard in front of the keep building), then the same building's upper
 // floors and cellar as separate plans in a row below. Black line art on white with a light grid

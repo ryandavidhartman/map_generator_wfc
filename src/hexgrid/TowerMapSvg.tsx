@@ -1,5 +1,6 @@
-// Renders a generated Tower site the way the reference does (2026-10-31, see CLAUDE.md's punch
-// list): a schematic side view of the tower on the left, and one top-down floor plan per
+// Renders a generated Tower site the way the reference does (2026-10-31, see map_generator's
+// CLAUDE.md punch list, snapshot in docs/reference/map_generator-CLAUDE.md): a schematic
+// side view of the tower on the left, and one top-down floor plan per
 // floor on the right, each plan lined up with its floor in the side view. Black line art on
 // white — thick black walls, a light grid inside rooms, a solid black curved stair. All
 // geometry comes from engine/towerPlan.ts, derived at render time from the TowerSite's own

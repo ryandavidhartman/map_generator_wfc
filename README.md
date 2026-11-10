@@ -2,15 +2,26 @@
 
 A React web app for running overland hex crawls in OSR-style tabletop RPGs. The overland map
 is generated with Wave Function Collapse, so coasts, rivers and roads join up across hexes.
-Clicking into a hex opens its terrain, danger, encounter rollers and generated sites
-(dungeons, settlements, towers, keeps, camps, shrines and rifts), each with its own map.
 
-**Status:** playable. The WFC overland map (2D and 3D views, fog of war, chunk growth as the
-party explores, GM terrain editing and planning of hexes ahead of the party, campaign files
-and PNG exports) is built on a fork of the OSR Hex Crawl Generator (the hex detail and site
-generators). See
-[`docs/PLAN.md`](docs/PLAN.md) for the design and the open punch list, and
-[`docs/HISTORY.md`](docs/HISTORY.md) for how it was built.
+**Status:** playable. Open work is the punch list in [`docs/PLAN.md`](docs/PLAN.md), which
+also has the design; [`docs/HISTORY.md`](docs/HISTORY.md) is how it was built. The overland
+map is new here; the hex detail and site generators are forked from the OSR Hex Crawl
+Generator.
+
+## What it does
+
+- **Overland map:** 2D and 3D views (3D uses WebGPU, falling back to WebGL2), with fog of
+  war. The map grows in chunks as the party explores, and a hex the party has entered
+  never changes.
+- **Hexes:** clicking into a revealed hex shows its terrain, danger, encounter rollers and
+  point of interest, rolled when the party first enters it.
+- **Sites:** dungeons, settlements, towers, keeps, camps, shrines and rifts are generated
+  from a hex's point of interest. Dungeons, settlements, towers, keeps and camps each get a
+  map; a town's map follows the hex's coast, river or lake.
+- **GM tools:** a GM view that shows the whole generated map, editing a revealed hex's
+  terrain, danger or point of interest, and planning hexes ahead of the party.
+- **Saving:** campaigns save in the browser automatically, and can be saved to or loaded
+  from a file. Player and GM views export as PNG.
 
 ## Getting started
 
@@ -27,10 +38,15 @@ Other commands:
 ```bash
 npm run test       # run the Vitest suite
 npm run build      # typecheck and build for production
+npm run preview    # serve the production build
 npx tsc -b         # typecheck only
-npm run sim -- --seeds 10   # generate worlds and report terrain statistics (for tuning)
+npm run sim -- --seeds 10    # generate worlds and report terrain statistics (for tuning)
 npm run town-maps -- --png   # render a town map for every water tile, with a screenshot
 ```
+
+`/poi/<n>` (n from 1 to 200) is a review page for one row of the d200 point-of-interest
+table: it generates that row's site, and for a settlement offers a choice of the water around
+the town.
 
 ## License
 

@@ -17,7 +17,12 @@ it has taken 60 s (2026-11-10), which is why `vite.config.ts` sets a 30 s per-te
 `docs/reference/map_generator-CLAUDE.md` is a snapshot of map_generator's CLAUDE.md as of the
 fork: its architecture notes for the site generators, state and tables still apply here. Its
 punch list is superseded by PLAN.md's, and it refers to `docs/` files that weren't copied.
-Code comments citing "punch-list 1a" mean that old punch list.
+Code comments citing "punch-list 1a" mean that old punch list. Code comments citing
+`docs/plan-osr-integration.md`, `docs/plan-sites-settlements-mongo.md`,
+`docs/plan-settlement-map-overhaul.md`, `docs/plan-camp-map-overhaul.md`,
+`docs/osr-appendix-cde-source.txt` or `docs/original-text-encounters.md` mean those files in
+`~/dev/source/map_generator/docs/`; they weren't copied either. `combined-monsters.md` / `.pdf`
+(the monster tables' source) is in `~/dev/source/b_x/publication/monsters/`.
 
 ## Invariants
 
