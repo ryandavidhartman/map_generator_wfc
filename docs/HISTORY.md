@@ -398,6 +398,48 @@ solve weights: `deriveHexGeo` reads `WORLD_TUNING` and `BIOME_TUNING` each time 
 so changing them can move lakes on revealed hexes (whose terrain is saved) and terrain on
 unrevealed solved ones. The user asked for the line to be corrected.
 
+### Item 2 finished: river mouths, lakes, the /poi water picker (2026-11-10, pushed straight to main at the user's request)
+
+With the rivers done on 2026-11-06, item 2 had three parts left. Its spec, as it stood:
+
+| Shape | Draw it as | Status before |
+|---|---|---|
+| River end (RIVER_END) with a lake | Into a lakeshore | Done without the lake |
+| River mouth (RIVER_INTO_COAST) | Coast and river together (the river was lost) | Open |
+| Lake on a plain grass hex | A lakeshore on one side, reusing the coast drawing, side from the seed | Open |
+
+plus a water picker on the /poi review page (a Water select and a Rotation select, the tile's
+edges sent through `waterForEdges`, kept out of saves, the map labeled with tile and rotation).
+
+- **Lake look:** Claude asked; the user chose a curved lakeshore with the sand strip and no
+  piers (2026-11-10), over reusing the sea's straight shore and piers. Built so the layout code
+  didn't change: the town is still cut straight on its lake side, exactly like a coast, so it
+  stays convex, and the lake is a disc (1.6 × the town's radius) touching that cut. The first
+  version let the shore's wobble push into the town (Village blocks in the lake, caught by the
+  new test); the wobble now only pulls the shore away from the town.
+- **Which water:** `waterForEdges` now reads `lake`. A river mouth is a coast that keeps its
+  river edge (the tile's sea lies exactly across from it). A river end with a lake is a lake
+  across from its river edge, with the river; a grass-only hex's lake side comes from the seed.
+- **River into water:** given its edge and the opposite one, so the existing course, block
+  cutting, wall gaps and bridges all apply; the drawn arm stops a little past the shore, under
+  the water's fill. The river uses its own seeded stream and plain coasts gain no new keys, so
+  all 288 baseline towns still hash the same.
+- **/poi picker:** `ReviewWaterContext` (state/) carries the picked tile's edges to
+  `SettlementView`, as a React context rather than a map-state field, so it can't reach a save.
+  21 water options: From terrain, the 18 tiles with a sea, shoreline or river edge, RIVER_END
+  ending in a lake, and a lake on a grass-only hex. `tileWaterEdges` (world/terrain.ts) gives a
+  tile's water edges at a rotation; a test checks it against `deriveHexGeo` for every tile and
+  rotation, and the town-maps script uses it too (it had its own copy).
+- **Checks:** `checkRiverTown` accepts a river ending in water. New settlementWaterBodies.test.ts
+  (8 tests: the water choices, lake plans for 4 sizes × 6 seeds, mouth and lake rivers at every
+  rotation through `checkRiverTown`, no block or gate in the water). 1,506 tests pass; the suite
+  ran in 29 s, so the 60 s seen earlier the same day was a busy machine. Browser check: /poi/180
+  (a Town) in Chromium, driven over the DevTools protocol through six picker cases; the layout
+  line named the right water and direction for each. Screenshots of the town-maps cases and the
+  /poi cases were shown to the user, who tested it and approved ("looks good!", 2026-11-10).
+- The spec's "Later: a true island drawing for towns on Ocean hexes" became punch-list item 14
+  (user, 2026-11-10).
+
 ## Risks, as written during the build
 
 PLAN.md's Risks section has them as they stand now.

@@ -18,7 +18,7 @@
 import type { Terrain } from '../data/tables'
 import { mixSeed } from '../wfc/rng'
 import { edgeOf, type PlacedTile } from '../wfc/rules'
-import { HEX_DIRS, TILE_LIST, TILE_TYPE, type EdgeType, type HexDir } from '../wfc/tiles'
+import { HEX_DIRS, TILE_LIST, TILE_TYPE, rotateHexEdges, type EdgeType, type HexDir } from '../wfc/tiles'
 import type { FieldSample, WorldFields } from './fields'
 
 export const BIOME_TUNING = {
@@ -73,4 +73,14 @@ function hasLake(tile: PlacedTile, seed: number, t: typeof BIOME_TUNING): boolea
   if (def.name === 'RIVER_END') return roll < t.riverEndLakeChance
   if (HEX_DIRS.every((d) => def.edges[d] === 'grass')) return roll < t.lakeChance
   return false
+}
+
+// A tile's sea, shoreline and river edges at a rotation, sorted the way deriveHexGeo sorts a
+// placed tile's (it reads them through edgeOf, which turns the tile with the same
+// rotateHexEdges). For a hex that has no placed tile: the /poi review page's water picker and the
+// town-map script (punch-list item 2).
+export function tileWaterEdges(type: number, rotation: number): { seaEdges: HexDir[]; coastEdges: HexDir[]; riverEdges: HexDir[] } {
+  const edges = rotateHexEdges(TILE_LIST[type].edges, rotation)
+  const of = (t: EdgeType) => HEX_DIRS.filter((d) => edges[d] === t)
+  return { seaEdges: of('water'), coastEdges: of('coast'), riverEdges: of('river') }
 }

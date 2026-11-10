@@ -12,6 +12,8 @@ Partial re-run 2026-11-06 (town-map rivers, punch-list item 2): rows 4 and 39 re
 their evidence updated, rows 4a and 39a added; both hold.
 Partial re-run 2026-11-10 (fewer roads, punch-list item 1): rows 15 and 18 re-checked after
 `ROAD_WEIGHT` went into `getWorldRules` and `anchorShareOfLand` into stats.ts; both hold.
+Partial re-run 2026-11-10 (town-map lakes, river mouths and the /poi water picker, punch-list
+item 2): rows 4, 17, 32 and 40 re-checked and updated, rows 39b and 40a added; all hold.
 
 ## File tree
 
@@ -20,7 +22,7 @@ Partial re-run 2026-11-10 (fewer roads, punch-list item 1): rows 15 and 18 re-ch
 | 1 | data/: Terrain includes Coast and Hills | data/tables.ts:12,14 | ✓ |
 | 2 | data/: the 3d6 start table | data/tables.ts:32 `terrainFor3d6` | ✓ |
 | 3 | engine/generateHex.ts: anchor settlements | generateHex.ts:78 `rollAnchorSettlement` | ✓ |
-| 4 | engine/settlementPlan.ts: tile-edge water | settlementPlan.ts:254 `waterForEdges` | ✓ |
+| 4 | engine/settlementPlan.ts: tile-edge water (rivers, coasts, lakes, river mouths) | settlementPlan.ts:269 `waterForEdges` (reads `lake` and keeps a mouth's `riverEdges`) | ✓ |
 | 4a | engine/riverCourse.ts: town-map river courses | riverCourse.ts:97 `riverCourseFromEdges`, :150 `riverCourseInHex` | ✓ |
 | 5 | wfc/tiles.ts: the tile set, edges and levels | exports `TILE_LIST`, `TileDef`, `LEVELS_COUNT` | ✓ |
 | 6 | wfc/cube.ts: cube helpers | exports `cubeKey`, `cubeDistance`, `cubeNeighbor`… | ✓ |
@@ -34,7 +36,7 @@ Partial re-run 2026-11-10 (fewer roads, punch-list item 1): rows 15 and 18 re-ch
 | 14 | world/masks.ts: zones and allowed tiles | exports `zoneOf`, `createMaskFor` | ✓ |
 | 15 | world/solve.ts: solveWorldChunk with masks, lookahead, river loops; world rules | solve.ts:14-15 imports, :57-60, `getWorldRules` | ✓ |
 | 16 | world/rivers.ts: loop detection and breaking | exports `findRiverLoops`, `breakRiverLoops` | ✓ |
-| 17 | world/terrain.ts: deriveHexGeo → terrain, edges, lake | terrain.ts:55 return value | ✓ |
+| 17 | world/terrain.ts: deriveHexGeo → terrain, edges, lake; tileWaterEdges | terrain.ts:55 return value; :82 `tileWaterEdges` (equal to deriveHexGeo's edges for every tile and rotation: terrain.test.ts) | ✓ |
 | 18 | world/stats.ts: used by tests and `npm run sim` | scripts/simulate.ts:7 imports it | ✓ |
 | 19 | world/protocol.ts: request and response | exports `SolveChunkRequest/Response`, `handleSolveChunkRequest` | ✓ |
 | 20 | world/solver.worker.ts: the Web Worker | solver.worker.ts:6-7 | ✓ |
@@ -49,7 +51,7 @@ Partial re-run 2026-11-10 (fewer roads, punch-list item 1): rows 15 and 18 re-ch
 | 29 | render3d/MapScene: renderer, camera, controls, meshes, markers, picking | MapScene.ts:206, 228, 316, 481, 585-648, 385 `pick` | ✓ |
 | 30 | render3d/ThreeMapView: owns canvas and MapScene | ThreeMapView.tsx:15, 28, 57 | ✓ |
 | 31 | hexgrid/: site renderers, colors.ts, hexMath.ts | directory listing | ✓ |
-| 32 | state/: mapReducer, MapContext, useChunkGrowth, testWorld | directory listing | ✓ |
+| 32 | state/: mapReducer, MapContext, useChunkGrowth, testWorld, ReviewWaterContext | directory listing | ✓ |
 | 33 | persistence/localStorage.ts: the save and campaign files | `saveMapState`, `campaignToJson`, `campaignFromJson` | ✓ |
 | 34 | components/: Campaign menu and start dialog | CampaignMenu.tsx, StartMapDialog.tsx | ✓ |
 | 35 | App.tsx: routes, the two toggles, lazy 3D view | App.tsx:14, 41-42, 79-81 | ✓ |
@@ -63,7 +65,9 @@ Partial re-run 2026-11-10 (fewer roads, punch-list item 1): rows 15 and 18 re-ch
 | 38 | only render3d/ imports Three.js, and it's lazy-loaded | grep; App.tsx:14 `lazy(import(...))`; no static import of render3d elsewhere; build: main bundle has no `WebGPURenderer` | ✓ |
 | 39 | pointy-top; settlement water maps tile edges to angles | hexMath.ts:1; riverCourse.ts:54 `EDGE_ANGLE_DEG` (used by `waterForEdges`); settlementWater.test.ts:125 | ✓ |
 | 39a | town-map rivers: crossings at the river edges' midpoints; one edge ends in town, two run through, three join; blocks cut around the band, wall gapped, bridged on main roads | riverCourse.ts `riverCourseFromEdges`, `hexEdgeMidpoint`; settlementPlan.ts `cutCellByRiver`, `weldCells`, the bridges and wall loops in `computeSettlementPlan`; settlementRiverChecks.ts `checkRiverTown` (items 1-6), riverCourse.test.ts | ✓ |
+| 39b | town-map lakes and river mouths: a lake is a disc touching the straight waterfront cut, shore wobbling only away from town, no piers; a river end's lake across from its edge; a mouth's river runs from its edge, drawn up to the shore; plain coasts have no `lake`/`river` key | settlementPlan.ts:141 `LAKE_RADIUS`, :926 `lake`, :941 `coastRiverEdges`, :1387 `riverPlan`, :1397 the lake shore; settlementWaterBodies.test.ts; settlementPlanBaseline.test.ts unchanged | ✓ |
 | 40 | the three routes | App.tsx:79-81 | ✓ |
+| 40a | /poi: the water picker passes a tile's water edges to SettlementView through ReviewWaterContext, outside the map state | PoiReviewPage.tsx:32 `WATER_OPTIONS`, :163 `ReviewWaterProvider`; SettlementView.tsx:63-65 reads it before `geoAt`; MapState has no such field (mapReducer.ts:41) | ✓ |
 
 ## Data flow
 

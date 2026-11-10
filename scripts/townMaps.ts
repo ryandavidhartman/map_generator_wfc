@@ -2,8 +2,9 @@
 //   npm run town-maps -- [--type Town] [--seed 7] [--rotation 0] [--tiles RIVER_B,COAST_A] [--png]
 // Renders one town map per case with the real SettlementMapSvg, into
 // node_modules/.tmp/town-maps/town-maps.html, laid out in a labeled grid. The cases are: no
-// water, a coast with no tile (an Ocean hex's random side), and every water tile in TILE_LIST
-// (or just the --tiles listed) at --rotation, with its edges sent through waterForEdges exactly
+// water, a coast with no tile (an Ocean hex's random side), a lake on a grass-only hex (`LAKE`
+// in --tiles), and every water tile in TILE_LIST plus RIVER_END ending in a lake (or just the
+// --tiles listed) at --rotation, with its edges sent through waterForEdges exactly
 // as a real hex with that tile would. --png also screenshots the page with headless Chromium
 // (see CLAUDE.md, "2D and town-map checks") into town-maps.png next to it.
 //
@@ -21,7 +22,8 @@ import type { Terrain } from '../src/data/tables'
 import { generateSettlement } from '../src/engine/generateSettlement'
 import { computeSettlementPlan, waterForEdges, type SettlementWaterInput } from '../src/engine/settlementPlan'
 import { SettlementMapSvg } from '../src/hexgrid/SettlementMapSvg'
-import { HEX_DIRS, rotateHexEdges, TILE_LIST, type HexDir, type TileDef } from '../src/wfc/tiles'
+import { TILE_LIST, TILE_TYPE } from '../src/wfc/tiles'
+import { tileWaterEdges } from '../src/world/terrain'
 
 const argValue = (name: string): string | undefined => {
   const i = process.argv.indexOf(`--${name}`)
@@ -42,13 +44,6 @@ function seededRng(s: number): () => number {
   }
 }
 
-// A tile's sea, coast and river edges after rotation, sorted the way deriveHexGeo does
-// (world/terrain.ts): 'water' edges are sea, 'coast' edges shoreline, 'river' edges river.
-function edgesOf(tile: TileDef, turn: number) {
-  const edges = rotateHexEdges(tile.edges, turn)
-  const of = (kind: string): HexDir[] => HEX_DIRS.filter((d) => edges[d] === kind)
-  return { seaEdges: of('water'), coastEdges: of('coast'), riverEdges: of('river') }
-}
 
 type Case = { label: string; water: SettlementWaterInput | null }
 const cases: Case[] = []
@@ -56,14 +51,20 @@ if (!only) {
   cases.push({ label: 'no water', water: null })
   cases.push({ label: 'Ocean hex (coast, random side)', water: { kind: 'coast' } })
 }
+// A lake on a hex with only grass edges (its side from the town's seed); `--tiles LAKE` picks it.
+if (!only || only.includes('LAKE')) {
+  cases.push({ label: 'lake (grass-only hex, seed side)', water: waterForEdges('Grassland', { seaEdges: [], coastEdges: [], riverEdges: [], lake: true }) })
+}
 for (const tile of TILE_LIST) {
-  const e = edgesOf(tile, rotation)
+  const e = tileWaterEdges(TILE_TYPE[tile.name], rotation) // sorted the way deriveHexGeo does
   if (e.seaEdges.length + e.coastEdges.length + e.riverEdges.length === 0) continue
   if (tile.name === 'WATER') continue // open sea: no town map
   if (only && !only.includes(tile.name)) continue
   // A tile with sea or shoreline edges is a Coast hex (world/terrain.ts); the rest are land.
   const terrain: Terrain = e.seaEdges.length + e.coastEdges.length > 0 ? 'Coast' : 'Grassland'
   cases.push({ label: `${tile.name} @${rotation} (${terrain})`, water: waterForEdges(terrain, e) })
+  // Half of inland river ends end in a lake (world/terrain.ts).
+  if (tile.name === 'RIVER_END') cases.push({ label: `${tile.name} @${rotation} + lake`, water: waterForEdges(terrain, { ...e, lake: true }) })
 }
 
 const site = generateSettlement(seededRng(seed), type)

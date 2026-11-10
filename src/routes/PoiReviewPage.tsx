@@ -6,6 +6,9 @@ import { ALL_TERRAINS, type Terrain } from '../data/tables'
 import { locationFeatureForD200 } from '../data/locationTables'
 import { pointOfInterestForFeatureRoll } from '../engine/generateHex'
 import { HexSiteContent } from '../components/hexdetail/HexSiteContent'
+import { ReviewWaterProvider, type ReviewWater } from '../state/ReviewWaterContext'
+import { HEX_DIRS, TILE_LIST, TILE_TYPE } from '../wfc/tiles'
+import { tileWaterEdges } from '../world/terrain'
 
 const MIN_ROLL = 1
 const MAX_ROLL = 200
@@ -18,6 +21,37 @@ const REVIEW_HEX_ID = '0,0'
 // campaign's localStorage save — see MapContext.tsx's `initialState`/`persist` props.
 const DANGER_LEVELS = Array.from({ length: 20 }, (_, i) => i + 1)
 
+// The water picker (PLAN.md punch-list item 2): "From terrain" is the old behavior (no tile, so
+// Ocean and Coast pick a random side); otherwise the settlement map gets the water of a real hex
+// with the chosen tile and rotation. Every tile with a sea, shoreline or river edge (not open sea),
+// plus a lake on a grass-only hex and a river end that ends in a lake.
+const FROM_TERRAIN = 'terrain'
+const LAKE = 'LAKE'
+const RIVER_END_LAKE = 'RIVER_END+LAKE'
+const WATER_TILES = TILE_LIST.filter((t) => t.name !== 'WATER' && HEX_DIRS.some((d) => ['water', 'coast', 'river'].includes(t.edges[d]))).map((t) => t.name)
+const WATER_OPTIONS = [
+  { value: FROM_TERRAIN, label: 'From terrain (no tile)' },
+  ...WATER_TILES.map((name) => ({ value: name, label: name })),
+  { value: RIVER_END_LAKE, label: 'RIVER_END ending in a lake' },
+  { value: LAKE, label: 'Lake (plain grass hex)' },
+]
+const RANDOM_ROTATION = -1
+
+function reviewWaterFor(choice: string, rotation: number): ReviewWater | null {
+  if (choice === FROM_TERRAIN) return null
+  if (choice === LAKE) {
+    return { label: 'lake on a grass-only hex', terrain: 'Grassland', edges: { seaEdges: [], coastEdges: [], riverEdges: [], lake: true } }
+  }
+  const tileName = choice === RIVER_END_LAKE ? 'RIVER_END' : choice
+  const edges = tileWaterEdges(TILE_TYPE[tileName], rotation)
+  const coast = edges.seaEdges.length + edges.coastEdges.length > 0
+  return {
+    label: `${tileName} @${rotation}${choice === RIVER_END_LAKE ? ' + lake' : ''}`,
+    terrain: coast ? 'Coast' : 'Grassland',
+    edges: { ...edges, lake: choice === RIVER_END_LAKE },
+  }
+}
+
 export function PoiReviewPage() {
   const { n } = useParams<{ n: string }>()
   const navigate = useNavigate()
@@ -26,6 +60,16 @@ export function PoiReviewPage() {
   // GM-facing local override the old campaign-wide partyLevel select used to provide here.
   const [dangerLevel, setDangerLevel] = useState(1)
   const [rerollNonce, setRerollNonce] = useState(0)
+  const [waterChoice, setWaterChoice] = useState(FROM_TERRAIN)
+  const [rotationChoice, setRotationChoice] = useState(RANDOM_ROTATION)
+  // "Random" re-picks the rotation on each Reroll POI (and on a new tile).
+  const rotation = useMemo(
+    () => (rotationChoice === RANDOM_ROTATION ? Math.floor(Math.random() * 6) : rotationChoice),
+    // rerollNonce and waterChoice aren't read: they deliberately trigger a fresh random pick.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [rotationChoice, rerollNonce, waterChoice],
+  )
+  const reviewWater = useMemo(() => reviewWaterFor(waterChoice, rotation), [waterChoice, rotation])
 
   const roll = Number(n)
   const rollIsValid = Number.isInteger(roll) && roll >= MIN_ROLL && roll <= MAX_ROLL
@@ -74,6 +118,29 @@ export function PoiReviewPage() {
           </select>
         </label>
         <label>
+          Water (a settlement's sea, lake or river, as on a real hex with this tile; "From terrain" uses the Terrain above)
+          <select value={waterChoice} onChange={(e) => setWaterChoice(e.target.value)}>
+            {WATER_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        {waterChoice !== FROM_TERRAIN && waterChoice !== LAKE && (
+          <label>
+            Rotation (60° steps clockwise; random re-picks on each reroll)
+            <select value={rotationChoice} onChange={(e) => setRotationChoice(Number(e.target.value))}>
+              <option value={RANDOM_ROTATION}>random ({rotation})</option>
+              {[0, 1, 2, 3, 4, 5].map((r) => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        <label>
           Danger Level (gates wandering-encounter difficulty and dungeon-site scaling)
           <select value={dangerLevel} onChange={(e) => setDangerLevel(Number(e.target.value))}>
             {DANGER_LEVELS.map((level) => (
@@ -93,9 +160,11 @@ export function PoiReviewPage() {
           Invalid roll — enter a number between {MIN_ROLL} and {MAX_ROLL} in the URL (e.g. /poi/135).
         </p>
       ) : (
-        <MapProvider key={`${roll}-${terrain}-${dangerLevel}-${rerollNonce}`} initialState={initialState} persist={false}>
-          <PoiReviewBody />
-        </MapProvider>
+        <ReviewWaterProvider value={reviewWater}>
+          <MapProvider key={`${roll}-${terrain}-${dangerLevel}-${rerollNonce}`} initialState={initialState} persist={false}>
+            <PoiReviewBody />
+          </MapProvider>
+        </ReviewWaterProvider>
       )}
     </div>
   )

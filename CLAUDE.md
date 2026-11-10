@@ -11,8 +11,8 @@ entries there. `docs/ARCHITECTURE-CHECKLIST.md` ties every claim in PLAN.md's Ar
 section to code; when a change makes one untrue, update both.
 
 **Status (2026-11-10):** milestones M0-M8 are done and merged; open work is PLAN.md's punch
-list. The suite takes about 60 s (measured 2026-11-10; it was 25-30 s on 2026-11-06), mostly
-the WFC, world and town-map tests.
+list. The suite takes about 30 s, mostly the WFC, world and town-map tests; on a busy machine
+it has taken 60 s (2026-11-10), which is why `vite.config.ts` sets a 30 s per-test timeout.
 
 `docs/reference/map_generator-CLAUDE.md` is a snapshot of map_generator's CLAUDE.md as of the
 fork: its architecture notes for the site generators, state and tables still apply here. Its
@@ -64,7 +64,8 @@ Code comments citing "punch-list 1a" mean that old punch list.
   revealed-hexes invariant for saved games, so don't retune those two without asking the user.
 - **Town-map checks:** `npm run town-maps -- [--type Town] [--seed 7] [--rotation 0]
   [--tiles RIVER_B,COAST_A] [--png]` (scripts/townMaps.ts) renders the real `SettlementMapSvg`
-  for no water, an Ocean hex and every water tile in `TILE_LIST`, the same town in each, into
+  for no water, an Ocean hex, a lake (`LAKE` in `--tiles`), every water tile in `TILE_LIST` and a
+  river end ending in a lake, the same town in each, into
   `node_modules/.tmp/town-maps/town-maps.html`; `--png` screenshots it to `town-maps.png`.
   Look at the PNG (and show it to the user) after any settlement-map change; the user approves
   visual changes from screenshots.

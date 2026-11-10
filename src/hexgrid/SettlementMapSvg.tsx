@@ -5,7 +5,7 @@
 // comes from engine/settlementPlan.ts, derived at render time from the Settlement's districts
 // (nothing extra is persisted). Districts are clickable and numbered; the seat gets a star.
 
-import type { Block, PlanWater, Pt, SettlementPlan } from '../engine/settlementPlan'
+import type { Block, PlanRiver, Pt, SettlementPlan } from '../engine/settlementPlan'
 
 export type SettlementMapDistrictData = { label: string; isSeat: boolean }
 
@@ -147,7 +147,7 @@ function BlockArt({ block, walled }: { block: Block; walled: boolean }) {
 // The river (PLAN.md punch-list item 2, ported from map_generator's 1b): each arm is a
 // constant-width, round-capped stroke. All edge strokes first, then all water strokes, so arms
 // that overlap (a junction) show no seam, and the visible edge stays 0.25 wide.
-function RiverArt({ water }: { water: Extract<PlanWater, { kind: 'river' }> }) {
+function RiverArt({ water }: { water: PlanRiver }) {
   return (
     <g style={{ pointerEvents: 'none' }} data-river-arms={water.arms.length}>
       {water.arms.map((arm, i) => (
@@ -165,6 +165,8 @@ export function SettlementMapSvg({ plan, districts, selectedDistrictId, onSelect
   const width = bounds.maxX - bounds.minX
   const height = bounds.maxY - bounds.minY
   const districtIds = [...new Set(plan.blocks.map((b) => b.districtId))]
+  // A river on its own, or one running into the sea or a lake.
+  const river = plan.water?.kind === 'river' ? plan.water : plan.water?.kind === 'coast' ? (plan.water.river ?? null) : null
 
   return (
     <svg
@@ -198,10 +200,13 @@ export function SettlementMapSvg({ plan, districts, selectedDistrictId, onSelect
             dirt roads drawn on top */}
         {plan.walled && <polygon points={pts(plan.outline)} fill={STREET} />}
 
-        {/* Water: drawn over the town ground (the blocks already leave room for it) */}
+        {/* Water: drawn over the town ground (the blocks already leave room for it). A river
+            running into the sea or a lake goes over the sand and under the water, so its mouth
+            opens into it. */}
         {plan.water?.kind === 'coast' && (
-          <g style={{ pointerEvents: 'none' }}>
+          <g style={{ pointerEvents: 'none' }} data-water={plan.water.lake ? 'lake' : 'sea'}>
             <polyline points={pts(plan.water.shore)} fill="none" stroke={SAND} strokeWidth={1.6} strokeLinejoin="round" />
+            {river && <RiverArt water={river} />}
             <polygon points={pts(plan.water.sea)} fill={WATER} stroke={WATER_EDGE} strokeWidth={0.25} strokeLinejoin="round" />
           </g>
         )}
@@ -252,8 +257,8 @@ export function SettlementMapSvg({ plan, districts, selectedDistrictId, onSelect
         )}
 
         {/* Bridges and piers */}
-        {plan.water?.kind === 'river' &&
-          plan.water.bridges.map(([a, b], i) => (
+        {river &&
+          river.bridges.map(([a, b], i) => (
             <g key={i} style={{ pointerEvents: 'none' }}>
               <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={WALL_EDGE} strokeWidth={2.2} />
               <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke={BRIDGE} strokeWidth={1.7} />

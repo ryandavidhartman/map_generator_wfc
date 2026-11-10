@@ -110,7 +110,7 @@ user before writing code. A pasted image has no URL, so this description is the 
   `towerPlan.test.ts` and `keepPlan.test.ts` do, and for the variants and edge cases (smallest
   and largest sizes, every feature row of the kind).
 - **Review routes:** `/poi/:n` force-generates d200 row *n*, with terrain and danger selectors
-  and a Reroll button. Tomb `/poi/25` (variants: 20, 94, 100, 133); Ruins `/poi/88` (104,
+  and a Reroll button (plus water and rotation selectors, which only settlements use). Tomb `/poi/25` (variants: 20, 94, 100, 133); Ruins `/poi/88` (104,
   140); Temple (oracle) `/poi/84`; Hermit's abode `/poi/131`.
 - **Screenshots:** there's no playwright package here, but its Chromium is cached at
   `~/.cache/ms-playwright/chromium_headless_shell-1248/chrome-headless-shell-linux64/chrome-headless-shell`.

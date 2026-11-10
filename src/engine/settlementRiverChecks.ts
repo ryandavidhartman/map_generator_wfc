@@ -8,7 +8,7 @@
 import { expect } from 'vitest'
 import { generateSettlement } from './generateSettlement'
 import { edgeAngle, hexEdgeMidpoint, nearestOnPolylines } from './riverCourse'
-import type { PlanWater, Pt, SettlementPlan, SettlementPlanInput, SettlementWaterInput } from './settlementPlan'
+import type { PlanRiver, Pt, SettlementPlan, SettlementPlanInput, SettlementWaterInput } from './settlementPlan'
 import { HEX_DIRS, type HexDir } from '../wfc/tiles'
 import type { SettlementType } from '../data/settlementTables'
 
@@ -22,7 +22,7 @@ export function seededRng(seed: number): () => number {
 
 export const TYPES: SettlementType[] = ['Village', 'Town', 'City', 'Metropolis']
 
-export type RiverWater = Extract<PlanWater, { kind: 'river' }>
+export type RiverWater = PlanRiver
 
 // Every river tile's edge set at rotation 0 (wfc/tiles.ts), plus the cases with no tile.
 export const SCENARIOS: Record<string, HexDir[]> = {
@@ -50,9 +50,22 @@ export function inputFor(seed: number, type: SettlementType): SettlementPlanInpu
   return { settlementType: site.settlementType, districts: site.districts, seedSource: `${site.settlementType}|${site.population}|${seed}` }
 }
 
+// The plan's river: on its own, or running into the sea or a lake (a coast's `river`).
 export function riverOf(plan: SettlementPlan): RiverWater {
-  expect(plan.water?.kind).toBe('river')
-  return plan.water as RiverWater
+  const river = plan.water?.kind === 'coast' ? plan.water.river : plan.water
+  expect(river?.kind).toBe('river')
+  return river as RiverWater
+}
+
+// Ray-cast point-in-polygon, for the sea and lake shapes (not convex).
+export function pointInPolygon(p: Pt, poly: Pt[]): boolean {
+  let inside = false
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const a = poly[i]
+    const b = poly[j]
+    if (a.y > p.y !== b.y > p.y && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) inside = !inside
+  }
+  return inside
 }
 
 export function isConvex(poly: Pt[]): boolean {
@@ -296,16 +309,25 @@ export function checkRiverTown(plan: SettlementPlan, label: string) {
   }
 
   // 6. The arms cross into the neighbouring hexes exactly at the right edge midpoints, and run
-  //    off the map.
+  //    off the map. A river into the sea or a lake (a mouth) enters at its entry midpoint and
+  //    ends in the water instead.
   const apothem = river.hexApothem
   expect(apothem).toBeCloseTo(plan.bounds.maxX, 9)
   const midpoint = (dir: HexDir) => hexEdgeMidpoint(dir, apothem)
-  const expectedMidpoints = [...river.entries, ...(river.exit !== null ? [river.exit] : [])].map(midpoint)
+  const mouth = plan.water?.kind === 'coast' ? plan.water : null
+  const expectedMidpoints = [...river.entries, ...(river.exit !== null && !mouth ? [river.exit] : [])].map(midpoint)
   const allCrossings = arms.flatMap((arm) => hexCrossings(arm, apothem))
-  expect(allCrossings.length).toBe(river.course === 'through' ? river.entries.length * 2 : river.entries.length + (river.exit !== null ? 1 : 0))
+  expect(allCrossings.length).toBe(
+    mouth ? river.entries.length : river.course === 'through' ? river.entries.length * 2 : river.entries.length + (river.exit !== null ? 1 : 0),
+  )
   for (const c of allCrossings) ensure(expectedMidpoints.some((m) => Math.hypot(m.x - c.x, m.y - c.y) < 0.01), `${context} crossing off a midpoint at ${key(c)}`)
   for (const arm of arms) {
     const offMap = (p: Pt) => Math.max(Math.abs(p.x), Math.abs(p.y)) > apothem + 1e-6
+    if (mouth) {
+      expect(offMap(arm[0]), `${context} mouth river doesn't start off the map`).toBe(true)
+      expect(pointInPolygon(arm[arm.length - 1], mouth.sea), `${context} mouth river doesn't end in the water`).toBe(true)
+      continue
+    }
     if (river.course !== 'spring') expect(offMap(arm[0])).toBe(true)
     if (river.course !== 'ending') expect(offMap(arm[arm.length - 1])).toBe(true)
     if (river.course === 'spring') expect(Math.hypot(arm[0].x, arm[0].y)).toBeLessThan(1e-6)

@@ -40,8 +40,12 @@ export type Pt = { x: number; y: number }
 // which way (an Ocean hex), in which case the plan picks one from its seed. River (PLAN.md
 // punch-list item 2): the hex's river edges, which the plan's river passes through
 // (riverCourseFromEdges); empty when nothing says which way, in which case the plan picks a
-// straight course from its seed.
-export type SettlementWaterInput = { kind: 'coast'; angle?: number } | { kind: 'river'; edges: HexDir[] }
+// straight course from its seed. A coast can also be a lake (`lake`: drawn with a curved shore and
+// no piers) and can take a river (`riverEdges`: a river mouth, or a river ending in a lake),
+// which runs from its edge straight across to the water (punch-list item 2).
+export type SettlementWaterInput =
+  | { kind: 'coast'; angle?: number; lake?: boolean; riverEdges?: HexDir[] }
+  | { kind: 'river'; edges: HexDir[] }
 
 export type SettlementPlanInput = {
   settlementType: SettlementType
@@ -69,27 +73,31 @@ export type Block = {
 export type OutlineShape = 'round' | 'angular' | 'elongated'
 export type StreetPattern = 'organic' | 'grid' | 'gridCore' | 'oldTown'
 
+// A coast's `lake` and `river` keys are left out (not false or null) when absent, so a plain
+// coast plan serializes exactly as before item 2 (settlementPlanBaseline.test.ts).
 export type PlanWater =
-  | { kind: 'coast'; angle: number; sea: Pt[]; shore: Pt[]; piers: [Pt, Pt][] }
-  | {
-      kind: 'river'
-      // The edges drawn as entries and exit (riverCourse.ts) and the course's shape.
-      entries: HexDir[]
-      exit: HexDir | null
-      course: RiverCourseKind
-      // Downstream direction (radians, y down) for labels: toward the exit, or inward from the
-      // entry when the river ends in town.
-      angle: number
-      // One polyline per arm, from the map's border to the border (through), or between the
-      // border and the town centre (spring/ending). Drawn as a round-capped stroke of
-      // 2 × halfWidth.
-      arms: Pt[][]
-      halfWidth: number
-      // The notional hex's apothem (= the map's half-size): its edge midpoints are where the
-      // arms cross into the neighboring hexes.
-      hexApothem: number
-      bridges: [Pt, Pt][]
-    }
+  | { kind: 'coast'; angle: number; sea: Pt[]; shore: Pt[]; piers: [Pt, Pt][]; lake?: true; river?: PlanRiver }
+  | PlanRiver
+
+export type PlanRiver = {
+  kind: 'river'
+  // The edges drawn as entries and exit (riverCourse.ts) and the course's shape.
+  entries: HexDir[]
+  exit: HexDir | null
+  course: RiverCourseKind
+  // Downstream direction (radians, y down) for labels: toward the exit, or inward from the
+  // entry when the river ends in town.
+  angle: number
+  // One polyline per arm, from the map's border to the border (through), or between the
+  // border and the town centre (spring/ending). Drawn as a round-capped stroke of
+  // 2 × halfWidth.
+  arms: Pt[][]
+  halfWidth: number
+  // The notional hex's apothem (= the map's half-size): its edge midpoints are where the
+  // arms cross into the neighboring hexes.
+  hexApothem: number
+  bridges: [Pt, Pt][]
+}
 
 export type SettlementPlan = {
   shape: OutlineShape
@@ -128,6 +136,9 @@ const STREET_HALF = 0.4
 const MAIN_ROAD_HALF = 1.5
 const WALL_GAP = 1.4
 const RIVER_HALF_WIDTH: Record<SettlementType, number> = { Village: 1.1, Town: 1.5, City: 1.9, Metropolis: 2.3 }
+// A lake's radius, in units of the town's radius: big enough that its shore reads as a curve
+// but stays close to the town along its waterfront.
+const LAKE_RADIUS = 1.6
 const LOT_GAP = 0.1
 
 const LOT_AREA: Record<DistrictType, number> = {
@@ -245,15 +256,19 @@ export function waterForMapHex(hex: AxialCoord & { terrain: Terrain }, hexes: Re
 // - sea or shoreline edges: a coast facing them (sea edges count fully, shoreline edges half,
 //   so a tile whose water only touches a corner faces that corner). A tile's water edges are
 //   always contiguous, so they can't cancel out the way opposite Ocean neighbors could;
+//   A river mouth (RIVER_INTO_COAST) keeps its river edge too: the river runs into the sea;
+// - a lake (HexGeo.lake: on a river end, or a hex with only grass edges): a lakeshore. A river
+//   end's lake lies across from its river edge, and the river runs into it; a grass-only hex's
+//   lake side comes from the plan's seed;
 // - otherwise river edges: a river through all of them (PLAN.md punch-list item 2: bends,
 //   river ends and junctions follow the tile; riverCourse.ts);
-// - otherwise no water. (A river mouth's river and lakes are still open in item 2.)
+// - otherwise no water.
 // Angles are on the town map's frame (radians, y down): pointy-top edge NE is -60°, E 0°, ...
 // (EDGE_ANGLE_DEG in riverCourse.ts).
 
 export function waterForEdges(
   terrain: Terrain,
-  edges: { seaEdges: readonly HexDir[]; coastEdges: readonly HexDir[]; riverEdges: readonly HexDir[] },
+  edges: { seaEdges: readonly HexDir[]; coastEdges: readonly HexDir[]; riverEdges: readonly HexDir[]; lake?: boolean },
 ): SettlementWaterInput | null {
   if (terrain === 'Ocean') return { kind: 'coast' }
   const rad = edgeAngle
@@ -261,7 +276,12 @@ export function waterForEdges(
   if (weighted.length > 0) {
     const x = weighted.reduce((sum, e) => sum + e.w * Math.cos(e.a), 0)
     const y = weighted.reduce((sum, e) => sum + e.w * Math.sin(e.a), 0)
-    return { kind: 'coast', angle: Math.atan2(y, x) }
+    const angle = Math.atan2(y, x)
+    return edges.riverEdges.length > 0 ? { kind: 'coast', angle, riverEdges: [...edges.riverEdges] } : { kind: 'coast', angle }
+  }
+  if (edges.lake) {
+    if (edges.riverEdges.length === 0) return { kind: 'coast', lake: true }
+    return { kind: 'coast', angle: edgeAngle(oppositeEdge(edges.riverEdges[0])), lake: true, riverEdges: [...edges.riverEdges] }
   }
   if (edges.riverEdges.length > 0) return { kind: 'river', edges: [...edges.riverEdges] }
   return null
@@ -900,6 +920,15 @@ export function computeSettlementPlan(input: SettlementPlanInput): SettlementPla
     outline = clipHalfPlane(outline, { x: seaDir.x * seaCut, y: seaDir.y * seaCut }, { x: -seaDir.y, y: seaDir.x }, 0)
   }
   const onSeaLine = (p: Pt) => waterKind === 'coast' && Math.abs(dot(p, seaDir) - seaCut) < 1e-3
+  // A lake (user, 2026-11-10: a curved lakeshore, no piers): the town is cut straight as for a
+  // coast, and the lake is a big disc touching that cut at its middle, curving away from the
+  // town on either side.
+  const lake = input.water?.kind === 'coast' && input.water.lake === true
+  const lakeRadius = radius * LAKE_RADIUS
+  const lakeCenter = { x: seaDir.x * (seaCut + 0.35 + lakeRadius), y: seaDir.y * (seaCut + 0.35 + lakeRadius) }
+  // In the sea or lake, `margin` short of its shore counting as wet.
+  const inStandingWater = (p: Pt, margin: number) =>
+    waterKind === 'coast' && (lake ? dist(p, lakeCenter) < lakeRadius + 0.35 + margin : dot(p, seaDir) > seaCut - margin)
 
   // A square map: the town's farthest edge plus a band of countryside. Its half-size is also the
   // notional hex's apothem (riverCourse.ts).
@@ -907,10 +936,19 @@ export function computeSettlementPlan(input: SettlementPlanInput): SettlementPla
   const extent = townReach + radius * 0.5
   let river: RiverShape | null = null
   let course: ReturnType<typeof riverCourseInHex> | null = null
-  if (input.water?.kind === 'river') {
+  // A river mouth, or a river ending in a lake: the river enters at its edge and runs straight
+  // across toward the water; its drawn arm stops at the shore (see the water shapes below).
+  const coastRiverEdges = input.water?.kind === 'coast' ? (input.water.riverEdges ?? []) : []
+  const riverEdges =
+    input.water?.kind === 'river'
+      ? input.water.edges
+      : coastRiverEdges.length === 1
+        ? [coastRiverEdges[0], oppositeEdge(coastRiverEdges[0])]
+        : coastRiverEdges
+  if (input.water?.kind === 'river' || riverEdges.length > 0) {
     // The river's own rng (the meander and the no-edges fallback), so the main stream is untouched.
     const riverRng = seededRngFromNumber(seedForString(`${input.seedSource}|river`))
-    const { entries, exit } = riverCourseFromEdges(input.water.edges, riverRng())
+    const { entries, exit } = riverCourseFromEdges(riverEdges, riverRng())
     course = riverCourseInHex(entries, exit, extent, null, riverOffset)
     river = riverShape(course, extent, townReach + 1, riverHalf, riverRng)
   }
@@ -1235,8 +1273,7 @@ export function computeSettlementPlan(input: SettlementPlanInput): SettlementPla
   })
 
   // Nothing grows in the water.
-  const isWet = (p: Pt, margin: number) =>
-    (waterKind === 'coast' && dot(p, seaDir) > seaCut - margin) || (river !== null && riverDistance(p) < riverHalf + margin + 1.5)
+  const isWet = (p: Pt, margin: number) => inStandingWater(p, margin) || (river !== null && riverDistance(p) < riverHalf + margin + 1.5)
 
   // Suburbs: houses on both sides of the road leading out of some gates, starting just past the
   // wall, with gaps here and there.
@@ -1346,7 +1383,32 @@ export function computeSettlementPlan(input: SettlementPlanInput): SettlementPla
     const reach = extent * 1.6
     const townHalf = radius * 1.1
     const freedom = (t: number) => Math.min(1, Math.max(0, (Math.abs(t) - townHalf) / (radius * 0.6)))
-    if (waterKind === 'coast') {
+    // The river's plan, for a river on its own or one running into a coast or lake.
+    const riverPlan = (): PlanRiver | null => {
+      if (!river || !course) return null
+      const angle = course.exit !== null ? edgeAngle(course.exit) : course.entries.length ? edgeAngle(course.entries[0]) + Math.PI : 0
+      // Into standing water: each arm stops a little past the shore, under the water's fill.
+      const arms = waterKind === 'coast' ? river.arms.map((arm) => {
+        const wet = arm.findIndex((p) => inStandingWater(p, -1.5))
+        return wet < 0 ? arm : arm.slice(0, wet + 1)
+      }).filter((arm) => arm.length >= 2) : river.arms
+      return { kind: 'river', entries: course.entries, exit: course.exit, course: course.kind, angle, arms, halfWidth: riverHalf, hexApothem: extent, bridges }
+    }
+    if (waterKind === 'coast' && lake) {
+      // A wobbly circle inside the lake's disc (which only touches the town's waterfront line
+      // plus the quay gap): the wobble only ever pulls the shore in, a little where it faces the
+      // town (like the sea's shore) and more freely out in the countryside.
+      const shore: Pt[] = []
+      const steps = 120
+      for (let i = 0; i < steps; i++) {
+        const a = waterAngle + Math.PI + (i / steps) * Math.PI * 2
+        const facing = Math.max(0, Math.cos(a - waterAngle - Math.PI)) ** 8
+        const r = lakeRadius - 0.35 * (noise(i * 0.7) + 1) * facing - 1.25 * (noise(i * 0.35 + 40) + 1) * (1 - facing)
+        shore.push({ x: lakeCenter.x + Math.cos(a) * r, y: lakeCenter.y + Math.sin(a) * r })
+      }
+      const r = riverPlan()
+      water = { kind: 'coast', angle: waterAngle, sea: shore, shore: [...shore, shore[0]], piers: [], lake: true, ...(r ? { river: r } : {}) }
+    } else if (waterKind === 'coast') {
       const along = { x: -seaDir.y, y: seaDir.x }
       const shore: Pt[] = []
       for (let t = -reach; t <= reach; t += 0.8) {
@@ -1368,20 +1430,10 @@ export function computeSettlementPlan(input: SettlementPlanInput): SettlementPla
           { x: p.x + seaDir.x * 4.5, y: p.y + seaDir.y * 4.5 },
         ])
       }
-      water = { kind: 'coast', angle: waterAngle, sea, shore, piers }
-    } else if (river && course) {
-      const angle = course.exit !== null ? edgeAngle(course.exit) : course.entries.length ? edgeAngle(course.entries[0]) + Math.PI : 0
-      water = {
-        kind: 'river',
-        entries: course.entries,
-        exit: course.exit,
-        course: course.kind,
-        angle,
-        arms: river.arms,
-        halfWidth: riverHalf,
-        hexApothem: extent,
-        bridges,
-      }
+      const r = riverPlan()
+      water = { kind: 'coast', angle: waterAngle, sea, shore, piers, ...(r ? { river: r } : {}) }
+    } else {
+      water = riverPlan()
     }
   }
 

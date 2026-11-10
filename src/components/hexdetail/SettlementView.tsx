@@ -3,6 +3,7 @@ import { useMapDispatch, useMapState } from '../../state/MapContext'
 import type { Hex } from '../../state/mapReducer'
 import type { Settlement, District } from '../../engine/generateSettlement'
 import { SettlementMapSvg, type SettlementMapDistrictData } from '../../hexgrid/SettlementMapSvg'
+import { useReviewWater } from '../../state/ReviewWaterContext'
 import { geoAt } from '../../world/hexTiles'
 import { computeSettlementPlan, waterForEdges, waterForMapHex, type OutlineShape, type PlanWater, type StreetPattern } from '../../engine/settlementPlan'
 import { DISTRICT_TYPE_TO_ENCOUNTER_KEY } from '../../data/encounterTables'
@@ -35,7 +36,9 @@ function compass(angle: number): string {
 }
 
 function waterLabel(water: PlanWater): string {
-  return water.kind === 'coast' ? `coast, sea to the ${compass(water.angle)}` : `river flowing ${compass(water.angle)}`
+  if (water.kind === 'river') return `river flowing ${compass(water.angle)}`
+  const body = water.lake ? `lakeshore, lake to the ${compass(water.angle)}` : `coast, sea to the ${compass(water.angle)}`
+  return water.river ? `${body}, with a river running into it` : body
 }
 
 function defaultShopTierForDistrict(type: DistrictType): ShopTier {
@@ -55,11 +58,14 @@ export function SettlementView({ hex, site }: { hex: Hex; site: Settlement }) {
   // The water follows the hex (user rule): its own terrain plus its revealed neighbors, each
   // with its direction from this hex on the overland map.
   const mapState = useMapState()
-  // The hex's real tile edges when it has a tile (M6), else its revealed neighbors.
+  // The hex's real tile edges when it has a tile (M6), else its revealed neighbors. On the /poi
+  // review page, a picked tile's edges come first (ReviewWaterContext).
+  const reviewWater = useReviewWater()
   const water = useMemo(() => {
+    if (reviewWater) return waterForEdges(reviewWater.terrain, reviewWater.edges)
     const geo = mapState.world ? geoAt(mapState.world, mapState.tiles, hex.id) : null
     return geo ? waterForEdges(hex.terrain, geo) : waterForMapHex(hex, mapState.hexes)
-  }, [hex, mapState.hexes, mapState.world, mapState.tiles])
+  }, [hex, mapState.hexes, mapState.world, mapState.tiles, reviewWater])
   const plan = useMemo(
     () =>
       computeSettlementPlan({
@@ -97,6 +103,7 @@ export function SettlementView({ hex, site }: { hex: Hex; site: Settlement }) {
         <p className="settlement-summary-notes">
           Layout: {SHAPE_LABEL[plan.shape]}, {PATTERN_LABEL[plan.pattern]}
           {plan.water && `; ${waterLabel(plan.water)}`}
+          {reviewWater && <span data-review-water={reviewWater.label}> (review: {reviewWater.label})</span>}
         </p>
 
         <div className="site-layout paper-layout">

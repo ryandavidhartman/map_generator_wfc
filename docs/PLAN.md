@@ -23,7 +23,6 @@ S a few hours, M a day or two, L several days.
 
 | # | Item | Area | Waiting on | Depends on | Size |
 |---|---|---|---|---|---|
-| 2 | Town-map water from tile shapes (rivers done; mouth, lakes, /poi left) | Overland map | Claude: ready | | M |
 | 3 | GM editing of unrevealed hexes | Overland map | Claude: ready (a few design questions) | | M |
 | 4 | Encounter rollers for dungeons, and the Tavern table | Sites | Claude: ready | | S |
 | 5 | No repeated room text within one dungeon | Sites | Claude: ready | | S |
@@ -35,46 +34,9 @@ S a few hours, M a day or two, L several days.
 | 11 | Road encounter tables | Overland map | User: the tables | | S-M |
 | 12 | Camp central-feature table | Sites | User: the table | | S |
 | 13 | NPC activity that fits the profession | Sites | User: only if it bothers them in play | | S |
+| 14 | Island drawing for towns on Ocean hexes | Sites | User: a reference image | | M |
 
 ### Details
-
-**2. Town-map water from tile shapes.** The town map used to draw one straight river or one
-coast. A layout change that keeps the current look: no reference image, the user checks
-screenshots (`npm run town-maps -- --png` renders every water tile; see CLAUDE.md). The rivers were done and approved by the user on 2026-11-06 (branch `town-map-rivers`) by porting
-map_generator's river code from its PR #1 (its punch-list 1b): `riverCourse.ts` and the
-curved block cutting in settlementPlan.ts (section 5). Coast-only and no-water towns came
-out unchanged (`settlementPlanBaseline.test.ts`).
-
-| Shape | Draw it as | Status |
-|---|---|---|
-| Straight river (RIVER_A, river crossings) | Straight, as before | Done |
-| Bend (RIVER_B, in NE and out W; one of the two commonest river tiles) | Following the bend | Done |
-| River end (RIVER_END) | From its one edge to the town's middle; with a lake, into a lakeshore | Done without the lake |
-| Junction (RIVER_D/E/F, three river edges) | Two rivers joining | Done: two arms meeting at the exit (user approved, 2026-11-06) |
-| River mouth (RIVER_INTO_COAST) | Coast and river together (today the river is lost) | Open |
-| Lake on a plain grass hex | A lakeshore on one side, reusing the coast drawing, side from the seed | Open |
-
-Also open: **a water picker on the /poi review page**, so every water case can be reviewed
-there. Today `PoiReviewPage.tsx` builds a lone hex with no world or tiles, so `SettlementView`
-falls back to `waterForMapHex`: Ocean and Coast settlements get a random side, and no other
-terrain ever gets water. The spec:
-
-- A "Water" select beside the Terrain select: "From terrain (no tile)" (today's behavior, the
-  default), then one entry per water tile in `TILE_LIST` (the river tiles, RIVER_END,
-  RIVER_INTO_COAST and the coast tiles), plus "Lake (plain grass hex)" once lakes are drawn.
-- A rotation select (0-5, or "random", which re-picks on each Reroll POI).
-- The chosen tile's edges come from its `TILE_LIST` definition turned by `rotateHexEdges`
-  (wfc/tiles.ts), sorted into sea, coast and river edges the way `deriveHexGeo` does
-  (world/terrain.ts), and go through the same `waterForEdges` call the real map uses, so the
-  page shows exactly what a hex with that tile would.
-- Plumbing: `SettlementView` reads its water from the map state (`geoAt`). Pass the review
-  hex's edges in without faking a world: for example an optional water-edges override on the
-  review map state, read by `SettlementView` before `geoAt`. Keep it out of saves.
-- Label the drawn map with the tile name and rotation, so a screenshot says what it shows.
-
-(map_generator solved the same problem for its own river model with a per-reroll random river
-case, in its `src/routes/poiReviewRiver.ts`; that file isn't in this repo and isn't needed.)
-Later: a true island drawing for towns on Ocean hexes.
 
 **3. GM editing of unrevealed hexes.** GM editing (section 6) covers revealed hexes only, from
 the hex page's Edit form. This adds editing hexes ahead of the party from the GM view. To
@@ -132,6 +94,14 @@ from the user (transcribed verbatim).
 **13. NPC activity tier.** `npcTables.ts`'s 1d5 tier ignores profession (e.g. "Dwarf Labourer
 — Infirm").
 
+**14. Island drawing for towns on Ocean hexes.** A settlement on an Ocean hex (a small island)
+gets a coast on one random side of its town map today (`waterForEdges` returns a coast with no
+angle; the plan picks one from its seed). This draws it as an island instead: water all round,
+the town on the land in the middle. From item 2's spec ("Later: a true island drawing for towns
+on Ocean hexes"); the user put it on the list on 2026-11-10. A new look, so per the visual-change
+rule it starts from a reference image (Claude's reading of the rule; the user hasn't said).
+To settle: how much land around the town, and whether it keeps piers and a harbor.
+
 ### Closed, and not planned
 
 Closed: the 3D view on real WebGPU (checked by the user in Chrome, 2026-11-05), hex
@@ -139,7 +109,8 @@ scale (6 miles per hex, user, 2026-11-05; see Decisions),
 map_generator's 1a (replaced by WFC and biome noise; its targets hold, see section 2),
 the open question of whether anchors replace or add to the d200 (add, M6), and the fog look
 in 3D (grey silhouettes, M4).
-Map_generator's 1b and 1c became item 2 (1b's river code was ported on 2026-11-06).
+Map_generator's 1b and 1c became item 2 (1b's river code was ported on 2026-11-06; item 2
+finished 2026-11-10, see HISTORY.md); its "later" island drawing is item 14.
 
 Not planned: a turn-clock state machine, a full procedural dungeon crawler, NPC adventuring
 parties, combat stat blocks (name and flavor only), undo.
@@ -161,6 +132,7 @@ As built. The original 2026-11-04 table is in HISTORY.md; the dates say when eac
 | GM editing | **Edit plus local re-solve, revealed hexes only** (2026-11-04; scope and fallback 2026-11-05). The GM changes a hex's terrain; WFC re-solves the *unrevealed* hexes within 2-4 to fit it, else the nearest shape that fits is used and the hex is flagged. Unrevealed hexes are punch-list item 3. |
 | 3D look | **Grey fog silhouettes; scenery follows terrain; buildings only on POI hexes; all four screen effects** (2026-11-05). Camera: hex-map-wfc's orbit controls, tilt limited. |
 | Saving | **localStorage: world seed, solved tiles, per-hex game data** (2026-11-04), plus save to / load from a file and player and GM PNG exports (2026-11-05). Mongo is punch-list item 8. |
+| Town-map water | **Follows the hex's tile** (item 2, 2026-11-06 and 2026-11-10): rivers follow their edges, a river mouth runs into the sea, and a lake gets a curved lakeshore with no piers (user, 2026-11-10). |
 | Roads | **About 10% of land hexes** (2026-11-05; done 2026-11-10 by weighting every road tile ×0.12, the user's choice over sparing anchor tiles). Travel rates on roads are out of scope. |
 
 ## Glossary
@@ -258,6 +230,7 @@ of the tile and the fields at its hex, so it's worked out when needed, not saved
   road, coast and sea edges, read from its tile and rotation. The town map uses them (section 5).
 - **Lakes** are a feature: half of inland river ends, and 9.5% of hexes with only grass edges,
   picked by a hash of the seed and hex (stable, no noise needed). hex-map-wfc has no lake tile.
+  A settlement on a lake hex gets a lakeshore on its town map (section 5).
 - **Eight terrains** (`ALL_TERRAINS`, which drives the pickers and legend): map_generator's
   River/coast is Coast here, and Hills is wired into the seven terrain-keyed tables. The start
   dialog's Random button rolls map_generator's 3d6 table (`terrainFor3d6`).
@@ -349,12 +322,18 @@ spread between worlds is wide by design: some are wetter, colder or more mountai
   cave mouth, standing stones, tent, rift), listed in the legend. The party dot moves aside on a
   POI hex.
 - The site generators are unchanged except the settlement's water: `waterForEdges` reads the
-  hex's real coast and river edges from its tile. The coast faces the sea edges (shoreline
-  edges count half); otherwise a river runs through all the river edges; an Ocean hex keeps a
-  random-side coast. A tile's water edges are contiguous, so map_generator's isthmus problem
-  can't happen. `waterForMapHex` (which calls `waterForHex`), the old guess from revealed
-  neighbors, is used only when a hex has no tile, such as on the /poi review page; its river
-  is straight.
+  hex's real coast, river and lake from its tile. The coast faces the sea edges (shoreline
+  edges count half), and a river mouth keeps its river; otherwise a lake gives a lakeshore;
+  otherwise a river runs through all the river edges; an Ocean hex keeps a random-side coast.
+  A tile's water edges are contiguous, so map_generator's isthmus problem can't happen.
+  `waterForMapHex` (which calls `waterForHex`), the old guess from revealed neighbors, is used
+  only when a hex has no tile and no picked water; its river is straight.
+- **The /poi review page's water picker:** a Water select (From terrain, every tile with a sea,
+  shoreline or river edge, a river end ending in a lake, and a lake on a grass-only hex) and a
+  Rotation select (0-5, or random, re-picked on each Reroll POI). The page hands
+  `SettlementView` the tile's edges (`tileWaterEdges`, world/terrain.ts) through
+  `ReviewWaterContext`, a React context rather than a map-state field, so it can't reach a save;
+  `SettlementView` reads it before `geoAt` and labels the layout with the tile and rotation.
 - **Town-map rivers** (`riverCourse.ts`, ported from map_generator): the town map is a square
   whose half-size is a notional pointy-top hex's apothem, so the river crosses the map's edge
   at the edge midpoints of the hex's river edges. Tile river edges have no flow direction:
@@ -362,7 +341,14 @@ spread between worlds is wide by design: some are wetter, colder or more mountai
   (straight or bending through the middle), and three a junction whose two arms join and leave
   through the edge farthest from the others. The plan cuts the blocks around the curved band
   (`cutCellByRiver`, `weldCells`), gaps the wall where it crosses and bridges it on main roads.
-  River mouths and lakes are punch-list item 2.
+- **Town-map lakes and river mouths** (settlementPlan.ts): a lake is drawn as a big disc
+  (`LAKE_RADIUS` × the town's radius) touching the town's straight waterfront cut, the same
+  cut a coast makes, so the town stays convex; its shore wobbles only away from the town, and it
+  has no piers. A river end's lake lies across from the river's edge (a grass-only hex's side
+  comes from the seed). A river mouth or a river ending in a lake runs straight from its edge
+  toward the water and is drawn up to the shore (the plan's coast carries it as `river`); the
+  same block cutting, wall gaps and bridges apply. A plain coast plan has no `lake` or `river`
+  key, so coast-only towns are unchanged (`settlementPlanBaseline.test.ts`).
 
 ### 6. GM editing
 
@@ -419,8 +405,8 @@ and in HISTORY.md. Every claim here is checked against the code in
 src/
   data/        ← from map_generator: tables (Terrain gained Coast and Hills; 3d6 start table)
   engine/      ← from map_generator: sites, encounters, treasure; anchor settlements in
-                 generateHex.ts, tile-edge water in settlementPlan.ts, town-map river
-                 courses in riverCourse.ts
+                 generateHex.ts, tile-edge water (rivers, coasts, lakes, river mouths) in
+                 settlementPlan.ts, town-map river courses in riverCourse.ts
   wfc/         ← ported from hex-map-wfc
     tiles.ts          the tile set (TILE_LIST): edges and levels per tile
     cube.ts           cube-coordinate helpers
@@ -435,7 +421,7 @@ src/
     masks.ts          zones and per-cell allowed tiles
     solve.ts          solveWorldChunk (masks, lookahead, river loops), the world's rules
     rivers.ts         river-loop detection and breaking
-    terrain.ts        deriveHexGeo: tile + fields → terrain, edges, lake
+    terrain.ts        deriveHexGeo: tile + fields → terrain, edges, lake; tileWaterEdges
     stats.ts          world measurements (for tests and `npm run sim`)
     protocol.ts       worker request and response
     solver.worker.ts  the Web Worker
@@ -461,7 +447,8 @@ src/
     water.ts, wavesMask.ts, postFX.ts   water, coastal waves, screen effects
     ThreeMapView.tsx  React wrapper: owns the canvas and the MapScene
   hexgrid/     ← map_generator's site map renderers, colors.ts, hexMath.ts
-  state/       ← mapReducer, MapContext, useChunkGrowth, testWorld (test fixture)
+  state/       ← mapReducer, MapContext, useChunkGrowth, testWorld (test fixture),
+                 ReviewWaterContext (the /poi page's picked water)
   persistence/ ← localStorage.ts: the save and campaign files
   components/, routes/  ← from map_generator, plus the Campaign menu and start dialog
   App.tsx      ← routes, the 2D/3D and GM view toggles, lazy-loads the 3D view
@@ -474,7 +461,8 @@ src/
 - **Hex orientation:** pointy-top throughout, as hex-map-wfc's models are built. map_generator
   was flat-top; the settlement map's water side maps tile edges to its own angles.
 - **Routes:** `/` (the overland map), `/hex/:hexId` (the hex detail page) and `/poi/:n` (the
-  POI review page, which has no map hex).
+  POI review page, which has no map hex; its water picker passes a tile's water edges to
+  `SettlementView` through `ReviewWaterContext`, outside the map state).
 
 ### Data flow
 

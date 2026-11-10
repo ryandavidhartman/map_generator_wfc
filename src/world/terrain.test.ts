@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { TILE_TYPE } from '../wfc/tiles'
+import { TILE_LIST, TILE_TYPE } from '../wfc/tiles'
 import type { FieldSample, WorldFields } from './fields'
-import { BIOME_TUNING, deriveHexGeo } from './terrain'
+import { BIOME_TUNING, deriveHexGeo, tileWaterEdges } from './terrain'
 
 // Fields with fixed values everywhere, to test the terrain rules directly.
 function fixedFields(sample: Partial<FieldSample> = {}, seed = 1): WorldFields {
@@ -47,6 +47,19 @@ describe('deriveHexGeo terrain', () => {
 
 describe('deriveHexGeo features', () => {
   const f = fixedFields()
+
+  it('tileWaterEdges gives the same water edges as a placed tile, for every tile and rotation', () => {
+    for (const def of TILE_LIST) {
+      for (let rotation = 0; rotation < 6; rotation++) {
+        const geo = deriveHexGeo(tile(def.name, rotation), f)
+        expect(tileWaterEdges(TILE_TYPE[def.name], rotation), `${def.name}@${rotation}`).toEqual({
+          seaEdges: geo.seaEdges,
+          coastEdges: geo.coastEdges,
+          riverEdges: geo.riverEdges,
+        })
+      }
+    }
+  })
 
   it('lists river and road edges, rotated with the tile', () => {
     expect(deriveHexGeo(tile('RIVER_B'), f).riverEdges).toEqual(['NE', 'W'])
