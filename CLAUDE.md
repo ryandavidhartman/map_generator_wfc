@@ -42,8 +42,8 @@ Code comments citing "punch-list 1a" mean that old punch list.
   out of the main bundle (`ThreeMapView.tsx` is lazy-loaded).
 - The reducer is synchronous. Starting a map and chunk growth solve in the worker first
   (`createStartingWorld`, `useChunkGrowth`) and dispatch the result. GM edits are the
-  exception: `EDIT_HEX` runs `pinHex` in the reducer on the main thread (see PLAN.md's Data
-  flow).
+  exception: `EDIT_HEX` and `PLAN_HEX` run `pinHex` in the reducer on the main thread (see
+  PLAN.md's Data flow).
 - Ported hex-map-wfc files keep Felix Turner's MIT notice in their header, along with a list
   of what changed. Keep both up to date when editing them.
 - The tsconfig isn't `strict`, so TypeScript can't narrow a union on a boolean flag. Use one

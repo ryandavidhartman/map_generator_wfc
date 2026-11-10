@@ -115,8 +115,8 @@ export type SceneryTile = {
   poi?: PoiMark | null
 }
 
-// Kinds drawn with a model (GLB or procedural); others (landmarks, cataclysms, hand-edited
-// POIs) and any POI on open water keep the yellow gem.
+// Kinds drawn with a model (GLB or procedural); others (landmarks, cataclysms, custom free-text
+// POIs, which have no siteKind) and any POI on open water keep the yellow gem.
 export function poiHasModel(tile: SceneryTile): boolean {
   return Boolean(tile.poi) && tile.poi!.kind !== 'none' && tile.type !== TILE_TYPE.WATER
 }

@@ -122,9 +122,9 @@ As built. The original 2026-11-04 table is in HISTORY.md; the dates say when eac
 | Codebase | **Fork and port** (2026-11-04). map_generator's app was copied in and hex-map-wfc's JavaScript ported to TypeScript. The two projects develop separately. |
 | Terrain | **WFC decides shape; noise decides biome** (2026-11-04). WFC places water, coast, rivers, roads and elevation; seeded noise assigns land biomes. |
 | Region size | **Start with 7 chunks (1,519 hexes) and grow by chunk** (2026-11-04; 7 chunks since M3). Everything within 8 hexes of the party is kept solved. |
-| Points of interest | **Rolled as in map_generator, plus settlement anchors** (2026-11-04; anchors add, 2026-11-05). The 1-in-6 gate and d200 Feature table stay; road ends, road junctions and river crossings become settlements too. |
+| Points of interest | **Rolled as in map_generator, plus settlement anchors** (2026-11-04; anchors add, 2026-11-05). The 1-in-6 gate and d200 Feature table stay; road ends, road junctions and river crossings become settlements too. The GM can plan a hex's point of interest ahead, picked from the Feature table or written by hand (2026-11-10). |
 | Danger | **The reveal-time rule stays** (2026-11-04). A hex's `dangerLevel` is computed when it's revealed, from its revealed neighbors. |
-| GM editing | **Edit plus local re-solve, revealed hexes only** (2026-11-04; scope and fallback 2026-11-05). The GM changes a hex's terrain; WFC re-solves the *unrevealed* hexes within 2-4 to fit it, else the nearest shape that fits is used and the hex is flagged. Unrevealed hexes are punch-list item 3. |
+| GM editing | **Edit plus local re-solve** (2026-11-04; scope and fallback 2026-11-05). The GM changes a hex's terrain; WFC re-solves the unrevealed, unplanned hexes within 2-4 to fit it, else the nearest shape that fits is used and the hex is flagged. **Planning unrevealed hexes** (2026-11-10, item 3): terrain, danger and point of interest, used at reveal; planned hexes are locked like revealed ones; opened from GM view; solved hexes only. |
 | 3D look | **Grey fog silhouettes; scenery follows terrain; buildings only on POI hexes; all four screen effects** (2026-11-05). Camera: hex-map-wfc's orbit controls, tilt limited. |
 | Saving | **localStorage: world seed, solved tiles, per-hex game data** (2026-11-04), plus save to / load from a file and player and GM PNG exports (2026-11-05). Mongo is punch-list item 8. |
 | Town-map water | **Follows the hex's tile** (item 2, 2026-11-06 and 2026-11-10): rivers follow their edges, a river mouth runs into the sea, and a lake gets a curved lakeshore with no piers (user, 2026-11-10). |
@@ -143,6 +143,8 @@ As built. The original 2026-11-04 table is in HISTORY.md; the dates say when eac
   that noise assigns on top of a tile's shape.
 - **Revealed:** the party has seen the hex. Revealed hexes are permanent: no re-solve, chunk
   growth or edit may change their tile or terrain (except the GM editing that hex directly).
+- **Planned:** a solved hex the party hasn't revealed, for which the GM has set terrain, danger
+  or a point of interest to use at reveal (section 6). Locked like a revealed hex.
 
 ## How it works
 
@@ -155,13 +157,14 @@ As built. The original 2026-11-04 table is in HISTORY.md; the dates say when eac
   tiles, so it isn't always (0, 0); if chunk 0 has none, a new seed is tried
   (`src/world/startWorld.ts`). From there the map grows by chunk (section 4).
 - Tiles come from hex-map-wfc's 34 active tile types × 6 rotations × up to 5 levels (about
-  900 states), with its edge rules and weights (river tiles ×1.6, road tiles ×0.12, section 2). Roads are part of
-  the same tiles, not a separate pass.
+  900 states), with its edge rules and weights (river tiles ×1.6, road tiles ×0.12, section
+  2). Roads are part of the same tiles, not a separate pass.
 - The solve runs in a Web Worker (`src/world/solver.worker.ts`), with hex-map-wfc's
   backtracking and recovery (unfixing, then Local-WFC, then dropping cells), steered by the
   world's masks (section 2).
-- **Revealed hexes are locked.** Recovery may only unfix or re-solve *unrevealed* hexes; a
-  revealed hex is always a fixed constraint (`isLocked`). If a chunk can't be solved without
+- **Revealed hexes are locked** (and so are the GM's planned hexes, section 6). Recovery may
+  only unfix or re-solve the other hexes; a revealed hex is always a fixed constraint
+  (`isLocked`). If a chunk can't be solved without
   touching a revealed hex, recovery's last resort drops a cell: it keeps the cell's tile and
   accepts an edge that doesn't match. Growing chunks early (section 4) makes this rare: one
   drop in 360 measured chunk solves.
@@ -232,9 +235,9 @@ of the tile and the fields at its hex, so it's worked out when needed, not saved
 
 **Measured** in M2 with `npm run sim -- --seeds 40` (40 worlds of 19 chunks, about 4,100 hexes
 each; 0 failed solves, 0 dropped cells, about 73 ms per chunk). Roads were cut afterwards
-(punch-list item 1, 2026-11-10); the rivers, lakes, roads and anchors rows are from `npm run sim -- --seeds 30` with
-`ROAD_WEIGHT` 0.12 (0 failed, 0 dropped), and the terrain shares stayed within 1.3 points of
-these:
+(punch-list item 1, 2026-11-10); the rivers, lakes, roads and anchors rows are from
+`npm run sim -- --seeds 30` with `ROAD_WEIGHT` 0.12 (0 failed, 0 dropped), and the terrain
+shares stayed within 1.3 points of these:
 
 | | Mean [min-max] | Target (map_generator's 1a) |
 |---|---|---|
@@ -264,7 +267,8 @@ spread between worlds is wide by design: some are wetter, colder or more mountai
   hexes next to the party as "unexplored" outlines the GM can click.
 - **GM view toggle:** shows the whole solved map, dimmed where unrevealed, for planning.
 - Hex game data is rolled at reveal, not at generation. So danger still depends on exploration
-  order, and nothing beyond the map shape is decided before it's seen.
+  order, and nothing beyond the map shape is decided before it's seen, except what the GM has
+  planned for a hex (section 6).
 
 ### 4. Chunk growth
 
@@ -297,8 +301,8 @@ spread between worlds is wide by design: some are wetter, colder or more mountai
   verbatim.
 - **Settlement anchors** (`src/world/anchors.ts`): a hex whose tile is a road end, a road
   junction (3+ roads) or a river crossing is an anchor, about 2.2% of land hexes (6.4% before
-  roads were cut to ~10%, 2026-11-10). It's read
-  from the tile when the hex is revealed, so nothing is saved. An anchor hex becomes a
+  roads were cut to ~10%, 2026-11-10). It's read from the tile when the hex is revealed, so
+  nothing is saved. A GM's planned point of interest takes precedence over the anchor. An anchor hex becomes a
   settlement, its type re-rolled on the d200 until it lands on a settlement row
   (`rollAnchorSettlement`, generateHex.ts), so the type odds stay the table's. This applies on
   reveal, on the starting hex and on Reroll. Other hexes roll as before, so the d200 still gives
@@ -312,7 +316,8 @@ spread between worlds is wide by design: some are wetter, colder or more mountai
   the tower with its roof; Keep the fort; Dungeon the mine; Shrine the standing stones. Camps
   (two tents and a fire) and rifts (a dark scar with glowing violet shards) are built from
   simple shapes. A POI's models replace the hex's trees (a bridge stays). Landmarks,
-  cataclysms, hand-edited POIs and anything on open water keep a yellow gem.
+  cataclysms, custom (free-text) POIs and anything on open water keep a yellow gem; a POI the
+  GM picked from the Feature table gets its kind's models.
 - **2D markers** (`poiIcons.ts`): a glyph per kind inside the yellow badge (house, tower, keep,
   cave mouth, standing stones, tent, rift), listed in the legend. The party dot moves aside on a
   POI hex.
@@ -373,8 +378,9 @@ spread between worlds is wide by design: some are wetter, colder or more mountai
   double-clicking a dimmed (solved, unrevealed) hex in 2D or 3D opens its hex page in a planning
   view (`PlannedHexView`). The GM can set its terrain, danger, Danger Level and point of
   interest (a row picked from the d200 Feature table, whose details are rolled from that row at
-  reveal so it gets the right site; or a custom name and notes); each defaults to "roll at reveal" (the tile's terrain, the neighbor-relative Danger
-  Level), so the GM can plan only what matters. A planned terrain reshapes the tile exactly as
+  reveal so it gets the right site; or a custom name and notes); each defaults to "roll at
+  reveal" (the tile's terrain, the neighbor-relative Danger Level), so the GM can plan only
+  what matters. A planned terrain reshapes the tile exactly as
   an edit of a revealed hex does, mismatch flag included. When the party reveals the hex,
   `MOVE_PARTY_TO` uses the plan instead of rolling and drops it. A planned hex is locked like a
   revealed one: chunk growth and GM edits nearby never reshape it, only planning it again. Only
@@ -512,12 +518,12 @@ every change (section 7). The reducer is synchronous, so it can't wait on the wo
   edited or planned).
 - **Saved versus derived:** edges, lakes and anchors are derived from the tile when needed,
   never saved. Terrain is derived too, except that a revealed hex saves its terrain with its
-  game data, since a GM edit can make it a label over another tile shape (section 6). Section 7
-  lists what the save holds.
+  game data, since a GM edit can make it a label over another tile shape (section 6), and a
+  planned hex's terrain label is saved in its plan. Section 7 lists what the save holds.
 - **Deterministic:** a grown chunk's solve depends only on the world params, the chunk and the
   tiles around it (per-chunk Rng from the world seed), and a hex's scenery only on the world
-  seed and the hex, so revealing or redrawing never reshuffles a hex's trees. GM edits re-solve
-  with an ordinary random roll.
+  seed and the hex, so revealing or redrawing never reshuffles a hex's trees. GM edits and
+  plans re-solve with an ordinary random roll.
 
 ### Rendering
 

@@ -302,7 +302,7 @@ campaign to a file and loading it back.
 
 ## After M8: punch-list work
 
-### Item 2, town-map rivers (2026-11-06, branch `town-map-rivers`)
+### Item 2, town-map rivers (2026-11-06, branch `town-map-rivers`, merged as PR #3)
 
 - **Ported from map_generator's PR #1** (its punch-list 1b, still open there when ported):
   `riverCourse.ts` (the course through a notional hex, the cubic bend, distance helpers), the
@@ -325,7 +325,7 @@ campaign to a file and loading it back.
   Screenshots of a straight river, a bend, a river end, two junctions and a village bend were
   checked by Claude and approved by the user (2026-11-06), junctions included.
 
-### Handoff gaps (2026-11-06, branch `handoff-gaps`)
+### Handoff gaps (2026-11-06, branch `handoff-gaps`, merged as PR #4)
 
 So another agent with only this repo can take punch-list items 1-5: `npm run town-maps`
 (scripts/townMaps.ts) renders the town map for every water tile and screenshots it; CLAUDE.md
@@ -398,7 +398,7 @@ solve weights: `deriveHexGeo` reads `WORLD_TUNING` and `BIOME_TUNING` each time 
 so changing them can move lakes on revealed hexes (whose terrain is saved) and terrain on
 unrevealed solved ones. The user asked for the line to be corrected.
 
-### Item 2 finished: river mouths, lakes, the /poi water picker (2026-11-10, pushed straight to main at the user's request)
+### Item 2 finished: river mouths, lakes, the /poi water picker (2026-11-10, pushed straight to main as 8728932 at the user's request)
 
 With the rivers done on 2026-11-06, item 2 had three parts left. Its spec, as it stood:
 
@@ -440,7 +440,7 @@ edges sent through `waterForEdges`, kept out of saves, the map labeled with tile
 - The spec's "Later: a true island drawing for towns on Ocean hexes" became punch-list item 14
   (user, 2026-11-10).
 
-### Item 3: GM planning of unrevealed hexes (2026-11-10, pushed straight to main at the user's request)
+### Item 3: GM planning of unrevealed hexes (2026-11-10, pushed straight to main as 1c35e42 at the user's request)
 
 Claude asked four questions; the user decided (2026-11-10): the GM can plan terrain, danger
 (and Danger Level) and point of interest, all of the Edit form; planned hexes are protected
@@ -453,7 +453,7 @@ hexes can be planned, not the fog beyond.
 - **Actions:** `PLAN_HEX` (replaces a plan; a planned terrain reshapes the tile through
   `pinHex` exactly as `EDIT_HEX` does, mismatch flag included) and `CLEAR_PLAN` (the tile keeps
   any reshaping). `MOVE_PARTY_TO` builds the revealed hex from the plan where it has one and
-  drops the plan.
+  drops the plan. An empty plan reveals exactly as an unplanned hex would (same dice).
 - **Point of interest:** the first version copied the revealed-hex Edit form's free-text
   Location and Development fields; the user found them confusing ("I don't know what to enter
   for Location and Development"). Now the GM picks a row of the d200 Feature table
@@ -468,7 +468,7 @@ hexes can be planned, not the fog beyond.
   point of interest now defaults to "keep as it is": before, every Save resent the POI, so even
   a terrain or danger change wiped the hex's generated site (Claude noticed while changing it).
   Browser check: picking "Barrow mounds" on the start hex saved a Tomb dungeon POI and
-  generated a Tomb site. An empty plan reveals exactly as an unplanned hex would (same dice).
+  generated a Tomb site.
 - **Locking:** `isLockedHex` / `lockedHexIds` (revealed or planned) replace "is revealed" in
   every solve guard: the worker's locked keys for chunk growth, `applyChunkResult` in
   `ADD_CHUNK`, and the re-solve around `EDIT_HEX` and `PLAN_HEX`. A planned hex, unlike a
@@ -481,16 +481,31 @@ hexes can be planned, not the fog beyond.
   the planned terrain's tint and the mismatch ring; double-click opens the plan there too.
   Players' view shows nothing. Side effect: in GM view, double-clicking an adjacent unrevealed
   hex opens its plan instead of moving the party (a single click still moves).
-- **Tests:** plannedHexes.test.ts (14: plan/clear, a planned Feature row revealing as that
-  row's site kind, refusals, label-only and reshaping terrain,
-  the reveal, locks against GM edits with a control showing the same edit reshapes those
-  hexes when unplanned, `ADD_CHUNK` skipping a planned hex, older saves). The route test's
-  "missing hex" moved to an unsolved id, since a solved one now opens the planning view.
-  1,521 tests pass (with an `EDIT_HEX` Feature-row test in mapReducer.test.ts). Browser check (2D, seed "plan-test"): double-click an unrevealed hex 2 east
-  of the party in GM view, plan Swamp / Deadly / "Drowned keep", see the ring and tooltip, walk
-  the party in: the hex revealed with exactly the plan, and the plan was gone. After the Feature
-  picker: planning "Town" revealed a Town routed to the settlement generator (named Stagford). The 3D
+- **Tests:** plannedHexes.test.ts (14: plan/clear, refusals, label-only and reshaping
+  terrain, the reveal, a planned Feature row revealing as that row's site kind, locks against
+  GM edits with a control showing the same edit reshapes those hexes when unplanned,
+  `ADD_CHUNK` skipping a planned hex, older saves), plus an `EDIT_HEX` Feature-row test in
+  mapReducer.test.ts. The route test's "missing hex" moved to an unsolved id, since a solved
+  one now opens the planning view. 1,521 tests pass.
+- **Browser checks** (2D, seed "plan-test"): double-click an unrevealed hex 2 east of the party
+  in GM view, plan Swamp / Deadly / "Drowned keep", see the ring and tooltip, walk the party
+  in: the hex revealed with exactly the plan, and the plan was gone. After the Feature picker:
+  planning "Town" revealed a Town routed to the settlement generator (named Stagford). The 3D
   double-click wasn't checked in a browser.
+
+### Docs audit (2026-11-10, after items 1-3)
+
+The user asked for an audit of the project docs. Claude checked CLAUDE.md, README.md, PLAN.md,
+HISTORY.md, ARCHITECTURE-CHECKLIST.md and brief-site-maps.md against the code. Fixed:
+CLAUDE.md said only `EDIT_HEX` runs `pinHex` (so does `PLAN_HEX`); PLAN.md's GM-editing
+decision still said "revealed hexes only" and called unrevealed hexes item 3, and sections 1, 3,
+5 and the data-flow notes didn't mention planned hexes (locked, decided before reveal, saved,
+taking precedence over an anchor); the 3D-marker note (and the `scenery.ts` comment) said
+hand-edited POIs keep the gem, but a Feature-table pick now gets its kind's models; the glossary
+gained "Planned"; five checklist rows had drifted line numbers; this file's item 3 entry had a
+misplaced sentence, and its item 2 and 3 headings gained their commit hashes, the earlier
+branches their PR numbers. README.md's feature list gained GM planning; brief-site-maps.md
+held.
 
 ## Risks, as written during the build
 

@@ -6,7 +6,7 @@ check each row against its evidence, fix PLAN.md (or this file's evidence) where
 drifted, and update the date and the result line. A claim that can't be tied to code gets
 fixed or cut from PLAN.md. Line numbers drift; the named symbol is what counts.
 
-Last run: 2026-11-05.
+Last full run: 2026-11-10 (see "Full audit" below); before that, 2026-11-05:
 Result: 58 claims; 55 held, and 3 errors from the trim itself were found and fixed (marked FIXED).
 Partial re-run 2026-11-06 (town-map rivers, punch-list item 2): rows 4 and 39 re-checked and
 their evidence updated, rows 4a and 39a added; both hold.
@@ -17,6 +17,8 @@ item 2): rows 4, 17, 32 and 40 re-checked and updated, rows 39b and 40a added; a
 Partial re-run 2026-11-10 (GM planning of unrevealed hexes, punch-list item 3): rows 34, 40,
 44-47, 51, 53 and 55 re-checked, their line numbers updated (the reducer grew); rows 45a, 46a
 and 51a added; all hold.
+Full audit 2026-11-10 (after items 1-3): every row re-checked against the code; rows 30, 45a,
+50, 51 and 53 had drifted line numbers (updated); all hold.
 
 ## File tree
 
@@ -52,7 +54,7 @@ and 51a added; all hold.
 | 27 | render2d files and roles | HexGridSvg (`gmView` prop), HexTile, tileShapes (`linePath`, `coastWaterPath`), mapData, poiIcons, MapExportSvg/exportPng | ✓ |
 | 28 | render3d: layout and scenery pure | neither imports `three` (only MapScene, tileMaterial, water, wavesMask, postFX do) | ✓ |
 | 29 | render3d/MapScene: renderer, camera, controls, meshes, markers, picking | MapScene.ts:206, 228, 316, 481, 585-648, 385 `pick` | ✓ |
-| 30 | render3d/ThreeMapView: owns canvas and MapScene | ThreeMapView.tsx:15, 28, 57 | ✓ |
+| 30 | render3d/ThreeMapView: owns canvas and MapScene | ThreeMapView.tsx:16 `canvasRef`, 29 `new MapScene`, 61 `scene.dispose()` | ✓ |
 | 31 | hexgrid/: site renderers, colors.ts, hexMath.ts | directory listing | ✓ |
 | 32 | state/: mapReducer, MapContext, useChunkGrowth, testWorld, ReviewWaterContext | directory listing | ✓ |
 | 33 | persistence/localStorage.ts: the save and campaign files | `saveMapState`, `campaignToJson`, `campaignFromJson` | ✓ |
@@ -81,17 +83,17 @@ and 51a added; all hold.
 | 43 | the worker keeps no state; a request carries world params and nearby tiles | protocol.ts:32-36 (fresh store per request); client.ts:52 | ✓ |
 | 44 | EDIT_HEX and PLAN_HEX call pinHex; the solver is in the main bundle | mapReducer.ts:289, 318; build: main bundle contains `HexWFCSolver` | ✓ |
 | 45 | dispatchers: START_MAP, MOVE_PARTY_TO, ADD_CHUNK, EDIT_HEX, REROLL_HEX, LOAD_MAP | StartMapDialog:30; HexGridSvg:125, ThreeMapView:30, HexBaseInfo:74; useChunkGrowth:36; HexBaseInfo:113, :78; useCampaignFile:25 (used by CampaignMenu and StartMapDialog) | ✓ |
-| 45a | PLAN_HEX and CLEAR_PLAN come from the planning view, opened by double-clicking an unrevealed hex in GM view (2D and 3D) | PlannedHexView.tsx:123, :82; HexGridSvg.tsx:133-135; ThreeMapView.tsx:36 | ✓ |
+| 45a | PLAN_HEX and CLEAR_PLAN come from the planning view, opened by double-clicking an unrevealed hex in GM view (2D and 3D) | PlannedHexView.tsx:109, :68; HexGridSvg.tsx:133-135; ThreeMapView.tsx:36 | ✓ |
 | 46 | MOVE_PARTY_TO reveals and rolls only into an unrevealed hex | mapReducer.ts:210-213 | ✓ |
 | 46a | the reveal uses the GM's plan where there is one, then drops it | mapReducer.ts:217-240 (a planned Feature row through `pointOfInterestForFeatureRoll`); plannedHexes.test.ts | ✓ |
 | 47 | REROLL_HEX: an anchor hex stays a settlement | mapReducer.ts:267 | ✓ |
 | 48 | LOAD_MAP takes a checked file | localStorage.ts:48 `campaignFromJson`; reducer comment :135 | ✓ |
 | 49 | SELECT_HEX, GENERATE_SITE, REROLL_SITE, NEW_MAP as in map_generator | line-for-line match with ~/dev/source/map_generator's reducer | ✓ |
-| 50 | growth: runs on state change, one at a time, failures skipped, on the overland screen | useChunkGrowth.ts:18-19, 24-26, 50; App.tsx:43 inside `OverlandMapScreen` | ✓ |
-| 51 | two guards; ADD_CHUNK, EDIT_HEX and PLAN_HEX use applyChunkResult; the edited or planned hex exempt | growth.ts:52-63; mapReducer.ts:253, 291, 319 | ✓ |
+| 50 | growth: runs on state change, one at a time, failures skipped, on the overland screen | useChunkGrowth.ts:19-20, 24-27, 51; App.tsx:43 inside `OverlandMapScreen` | ✓ |
+| 51 | two guards; ADD_CHUNK, EDIT_HEX and PLAN_HEX use applyChunkResult; the edited or planned hex exempt | growth.ts:56-67; mapReducer.ts:253, 291, 319 | ✓ |
 | 51a | revealed and planned hexes are both locked: in the worker solve and in applyChunkResult | mapReducer.ts:143 `isLockedHex`, :147 `lockedHexIds`; useChunkGrowth.ts:32; plannedHexes.test.ts ("planned hexes are locked") | ✓ |
 | 52 | saved vs derived | was: "terrain … never saved". A revealed hex saves `terrain` (mapReducer.ts:23) | FIXED |
-| 53 | determinism | was: "re-solving never reshuffles anything". GM edits re-solve with `Math.random` (mapReducer.ts:289, 318). Chunk solves: solve.ts:58 → chunks.ts:114 `chunkRng` | FIXED |
+| 53 | determinism | was: "re-solving never reshuffles anything". GM edits re-solve with `Math.random` (mapReducer.ts:289, 318). Chunk solves: solve.ts:66 → chunks.ts:114 `chunkRng` | FIXED |
 
 ## Rendering
 
