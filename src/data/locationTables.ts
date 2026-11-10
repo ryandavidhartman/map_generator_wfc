@@ -136,6 +136,12 @@ const FEATURE_RANGES: FeatureRange[] = [
 
 const LOCATION_FEATURES: LocationFeatureEntry[] = expandD200(FEATURE_RANGES)
 
+// The Feature table's rows in d200 order, for picking one by hand (the GM's planning view,
+// punch-list item 3). Any roll from `min` to `max` gives `entry`.
+export function locationFeatureRows(): { min: number; max: number; entry: LocationFeatureEntry }[] {
+  return FEATURE_RANGES.map((r) => ({ min: r.min, max: r.max, entry: r.entry }))
+}
+
 export function locationFeatureForD200(roll: number): LocationFeatureEntry {
   if (roll < 1 || roll > 200) {
     throw new Error(`locationFeatureForD200: roll out of range: ${roll}`)

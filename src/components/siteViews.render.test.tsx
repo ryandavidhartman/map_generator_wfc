@@ -263,14 +263,16 @@ describe('routes', () => {
     expect(html).not.toContain('data-hex-id')
   })
 
-  it('/hex/:id renders a saved hex\'s site, and a missing hex says so', () => {
+  it('/hex/:id renders a saved hex\'s site, an unrevealed solved hex\'s planning view, and a missing hex says so', () => {
     const { state, hex } = stateForFeature(150, 'Grassland', 3, 2) // 150 = Village
     expect(hex.site?.kind).toBe('settlement')
     vi.stubGlobal('localStorage', memoryStorage({ 'wfc-hex-crawl:map': JSON.stringify(state) }))
     const html = renderRoute(`/hex/${HEX_ID}`)
     expectCleanMarkup(html)
     expect(html).toContain('data-district-id=')
-    expect(renderRoute('/hex/9,9')).toContain('Hex not found')
+    // 9,9 is solved but unrevealed: the GM's planning view (punch-list item 3).
+    expect(renderRoute('/hex/9,9')).toContain('(not revealed)')
+    expect(renderRoute('/hex/99,0')).toContain('Hex not found') // unsolved
   })
 
   it('/poi/:n renders the review controls, and rejects an out-of-range roll', () => {

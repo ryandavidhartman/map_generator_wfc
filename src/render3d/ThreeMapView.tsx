@@ -5,6 +5,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMapDispatch, useMapState } from '../state/MapContext'
+import { isPlannable } from '../state/mapReducer'
 import { MapScene, type MarkerView } from './MapScene'
 import { tileDraws } from './layout'
 
@@ -19,8 +20,8 @@ export default function ThreeMapView({ gmView }: { gmView: boolean }) {
   const [error, setError] = useState<string | null>(null)
 
   // Latest state for the click handlers, which the scene keeps for its whole life.
-  const latest = useRef({ state, dispatch, navigate })
-  latest.current = { state, dispatch, navigate }
+  const latest = useRef({ state, dispatch, navigate, gmView })
+  latest.current = { state, dispatch, navigate, gmView }
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -28,9 +29,12 @@ export default function ThreeMapView({ gmView }: { gmView: boolean }) {
     const scene = new MapScene(canvas, {
       onClick: (id) => latest.current.dispatch({ type: 'MOVE_PARTY_TO', hexId: id }),
       onDoubleClick: (id) => {
-        const { state: s, dispatch: d, navigate: nav } = latest.current
+        const { state: s, dispatch: d, navigate: nav, gmView: gm } = latest.current
         if (s.hexes[id]) {
           d({ type: 'SELECT_HEX', hexId: id })
+          nav(`/hex/${id}`)
+        } else if (gm && isPlannable(s, id)) {
+          // GM view: an unrevealed hex opens its planning view (item 3).
           nav(`/hex/${id}`)
         } else {
           d({ type: 'MOVE_PARTY_TO', hexId: id })
@@ -67,9 +71,14 @@ export default function ThreeMapView({ gmView }: { gmView: boolean }) {
         .filter((h) => h.poi)
         .map((h) => h.id),
       danger: Object.values(state.hexes).map((h) => ({ hexId: h.id, danger: h.danger })),
-      mismatchHexIds: gmView ? Object.values(state.hexes).filter((h) => h.tileMismatch).map((h) => h.id) : [],
+      mismatchHexIds: gmView
+        ? [
+            ...Object.values(state.hexes).filter((h) => h.tileMismatch).map((h) => h.id),
+            ...Object.entries(state.planned).filter(([, p]) => p.tileMismatch).map(([id]) => id),
+          ]
+        : [],
     }),
-    [state.hexes, state.partyHexId, state.selectedHexId, gmView],
+    [state.hexes, state.planned, state.partyHexId, state.selectedHexId, gmView],
   )
 
   // Rebuild the tiles when the solved map changes (and once the scene is ready).

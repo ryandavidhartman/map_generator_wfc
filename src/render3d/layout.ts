@@ -138,7 +138,8 @@ export function tileDraws(state: MapState, gmView: boolean): TileDraw[] {
     const t = placedTileAt(state.tiles, id)!
     const hex = state.hexes[id]
     const geo = deriveHexGeo(t, fields)
-    const terrain = hex?.terrain ?? geo.terrain
+    // GM view shows a planned hex's terrain (item 3); players never see a plan.
+    const terrain = hex?.terrain ?? (gmView ? state.planned[id]?.terrain : undefined) ?? geo.terrain
     const look = tileLook({
       revealed: Boolean(hex),
       gmView,

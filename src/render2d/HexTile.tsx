@@ -1,10 +1,11 @@
 import { useEffect, useRef } from 'react'
-import type { Hex } from '../state/mapReducer'
+import type { Hex, PlannedHex } from '../state/mapReducer'
 import type { HexGeo } from '../world/terrain'
 import { axialToPixel, hexCornersPointsAttr, hexId, type AxialCoord } from '../hexgrid/hexMath'
 import { DANGER_COLORS, FEATURE_COLORS, TERRAIN_COLORS } from '../hexgrid/colors'
 import { coastWaterPath, linePath } from './tileShapes'
 import { POI_ICON_PATHS } from './poiIcons'
+import { locationFeatureForD200 } from '../data/locationTables'
 
 const UNREVEALED_FILL_REVEALABLE = '#3a3a3a'
 const UNREVEALED_FILL_FOG = '#1a1a1a'
@@ -13,6 +14,7 @@ const UNREVEALED_STROKE_FOG = '#2c2c2c'
 const GM_HIDDEN_STROKE = '#00000055'
 const MISMATCH_COLOR = '#ff3b3b'
 const GM_HIDDEN_DIM = 0.45 // opacity of the dark veil over unrevealed hexes in GM view
+const PLAN_COLOR = '#ffd54a' // GM view: the ring on a planned hex, the POI badge's yellow
 
 // Single click moves the party; double click opens the full-view details page. A single
 // click's action is delayed by this long so a second click arriving in time can cancel it
@@ -30,11 +32,15 @@ export type HexTileProps = {
   isParty: boolean
   isSelected: boolean
   isRevealable: boolean
+  // GM view: the GM's plan for this unrevealed hex (item 3), and whether double-clicking it
+  // opens its planning view.
+  plan?: PlannedHex | null
+  isPlannable?: boolean
   onSingleClick: () => void
   onDoubleClick: () => void
 }
 
-export function HexTile({ coord, size, hex, geo, showHidden, isParty, isSelected, isRevealable, onSingleClick, onDoubleClick }: HexTileProps) {
+export function HexTile({ coord, size, hex, geo, showHidden, isParty, isSelected, isRevealable, plan, isPlannable, onSingleClick, onDoubleClick }: HexTileProps) {
   const pendingClick = useRef<number | null>(null)
   const center = axialToPixel(coord, size)
   const inner = size * 0.96
@@ -42,7 +48,7 @@ export function HexTile({ coord, size, hex, geo, showHidden, isParty, isSelected
   // Full size, so the GM-view veil also covers the river and road ends crossing the gap
   // between hexes.
   const outerPoints = hexCornersPointsAttr(center, size)
-  const clickable = Boolean(hex) || isRevealable
+  const clickable = Boolean(hex) || isRevealable || Boolean(isPlannable)
   const drawn = hex ? 'revealed' : showHidden && geo ? 'hidden' : 'fog'
 
   useEffect(() => {
@@ -77,7 +83,7 @@ export function HexTile({ coord, size, hex, geo, showHidden, isParty, isSelected
     fill = TERRAIN_COLORS[hex!.terrain]
     stroke = DANGER_COLORS[hex!.danger]
   } else if (drawn === 'hidden') {
-    fill = TERRAIN_COLORS[geo!.terrain]
+    fill = TERRAIN_COLORS[plan?.terrain ?? geo!.terrain]
     stroke = isRevealable ? UNREVEALED_STROKE_REVEALABLE : GM_HIDDEN_STROKE
   } else {
     fill = isRevealable ? UNREVEALED_FILL_REVEALABLE : UNREVEALED_FILL_FOG
@@ -89,7 +95,9 @@ export function HexTile({ coord, size, hex, geo, showHidden, isParty, isSelected
     drawn === 'revealed'
       ? `${hex!.terrain} · ${hex!.danger} (level ${hex!.dangerLevel})${hex!.poi ? ` · ${hex!.poi.location}` : ''}${mismatch ? ' · tile mismatch' : ''}`
       : drawn === 'hidden'
-        ? `Unrevealed: ${geo!.terrain}`
+        ? plan
+          ? `Planned: ${plan.terrain ?? geo!.terrain}${plan.poiFeature ? ` · ${locationFeatureForD200(plan.poiFeature).feature}` : plan.poi ? ` · ${plan.poi.location}` : ''}${plan.tileMismatch ? ' · tile mismatch' : ''}`
+          : `Unrevealed: ${geo!.terrain}`
         : isRevealable
           ? 'Unexplored'
           : undefined
@@ -137,6 +145,20 @@ export function HexTile({ coord, size, hex, geo, showHidden, isParty, isSelected
           strokeDasharray={`${size * 0.12} ${size * 0.08}`}
           data-tile-mismatch="true"
         />
+      )}
+      {drawn === 'hidden' && plan && (
+        // GM view: a planned hex (item 3) gets a yellow ring over the veil, red and dashed when
+        // its tile couldn't be reshaped to the planned terrain, and a small badge for a planned POI.
+        <g data-planned="true" style={{ pointerEvents: 'none' }}>
+          <polygon
+            points={hexCornersPointsAttr(center, size * 0.78)}
+            fill="none"
+            stroke={plan.tileMismatch ? MISMATCH_COLOR : PLAN_COLOR}
+            strokeWidth={2.5}
+            strokeDasharray={plan.tileMismatch ? `${size * 0.12} ${size * 0.08}` : undefined}
+          />
+          {(plan.poi || plan.poiFeature) && <circle cx={center.x} cy={center.y} r={size * 0.18} fill={PLAN_COLOR} stroke="#00000088" strokeWidth={1} />}
+        </g>
       )}
       {hex?.poi && (
         <>

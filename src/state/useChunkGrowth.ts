@@ -9,6 +9,7 @@ import { tilesToStore } from '../world/hexTiles'
 import type { ChunkSolver } from '../world/startWorld'
 import { solveInWorker } from '../world/workerSolver'
 import { useMapDispatch, useMapState } from './MapContext'
+import { lockedHexIds } from './mapReducer'
 
 export function useChunkGrowth(solver: ChunkSolver = solveInWorker): { growing: boolean } {
   const state = useMapState()
@@ -28,7 +29,7 @@ export function useChunkGrowth(solver: ChunkSolver = solveInWorker): { growing: 
     busy.current = true
     setGrowing(true)
     const key = chunkKey(next)
-    solver(tilesToStore(state.tiles), next, world, lockedKeys(Object.keys(state.hexes)))
+    solver(tilesToStore(state.tiles), next, world, lockedKeys(lockedHexIds(state)))
       .then((res) => {
         if (latestWorld.current !== world) return // a new map was started meanwhile
         if (res.ok) {

@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { useMapDispatch, useMapState } from '../../state/MapContext'
-import { isAdjacentToParty, type Hex } from '../../state/mapReducer'
+import { isAdjacentToParty, type Hex, type HexEditPatch } from '../../state/mapReducer'
 import { ALL_TERRAINS, type DangerLevel, type Terrain } from '../../data/tables'
 import { TERRAIN_TO_ENCOUNTER_KEYS } from '../../data/encounterTables'
 import { EncounterRoller } from '../EncounterRoller'
+import { CUSTOM_POI_HINT, FEATURE_OPTIONS } from './featureOptions'
 
 const DANGER_LEVELS: DangerLevel[] = ['Safe', 'Unsafe', 'Risky', 'Deadly']
 
@@ -96,21 +97,20 @@ function HexEditForm({ hex, onDone }: { hex: Hex; onDone: () => void }) {
   const [terrain, setTerrain] = useState<Terrain>(hex.terrain)
   const [danger, setDanger] = useState<DangerLevel>(hex.danger)
   const [dangerLevel, setDangerLevel] = useState(hex.dangerLevel ?? 1)
-  const [hasPoi, setHasPoi] = useState(Boolean(hex.poi))
-  const [location, setLocation] = useState(hex.poi?.location ?? '')
-  const [development, setDevelopment] = useState(hex.poi?.development ?? '')
+  // 'keep' leaves the point of interest (and its generated site) alone; the others replace it.
+  const [poiMode, setPoiMode] = useState<'keep' | 'none' | 'feature' | 'custom'>('keep')
+  const [feature, setFeature] = useState(FEATURE_OPTIONS[0].roll)
+  // A custom POI starts from the current one when it's custom too (no Feature table routing).
+  const isCustom = Boolean(hex.poi) && hex.poi!.siteKind === undefined
+  const [location, setLocation] = useState(isCustom ? hex.poi!.location : '')
+  const [development, setDevelopment] = useState(isCustom ? hex.poi!.development : '')
 
   function handleSave() {
-    dispatch({
-      type: 'EDIT_HEX',
-      hexId: hex.id,
-      patch: {
-        terrain,
-        danger,
-        dangerLevel,
-        poi: hasPoi ? { location, development } : undefined,
-      },
-    })
+    const patch: HexEditPatch = { terrain, danger, dangerLevel }
+    if (poiMode === 'none') patch.poi = undefined
+    if (poiMode === 'feature') patch.poiFeature = feature
+    if (poiMode === 'custom') patch.poi = { location, development }
+    dispatch({ type: 'EDIT_HEX', hexId: hex.id, patch })
     onDone()
   }
 
@@ -156,18 +156,38 @@ function HexEditForm({ hex, onDone }: { hex: Hex; onDone: () => void }) {
       </label>
 
       <label>
-        <input type="checkbox" checked={hasPoi} onChange={(e) => setHasPoi(e.target.checked)} />
-        Has point of interest
+        Point of interest
+        <select value={poiMode} onChange={(e) => setPoiMode(e.target.value as 'keep' | 'none' | 'feature' | 'custom')}>
+          <option value="keep">Keep as it is ({hex.poi ? hex.poi.location : 'none'})</option>
+          <option value="none">None</option>
+          <option value="feature">Pick from the Feature table</option>
+          <option value="custom">Custom (write your own)</option>
+        </select>
       </label>
 
-      {hasPoi && (
+      {poiMode === 'feature' && (
+        <label>
+          Feature (its details, such as a settlement's name or a dungeon's type, are rolled from this
+          row as if the d200 had landed on it; the hex's site is generated anew)
+          <select value={feature} onChange={(e) => setFeature(Number(e.target.value))}>
+            {FEATURE_OPTIONS.map((o) => (
+              <option key={o.roll} value={o.roll}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+
+      {poiMode === 'custom' && (
         <>
+          <p className="edit-hint">{CUSTOM_POI_HINT}</p>
           <label>
-            Location
+            Name (what the party finds, e.g. "Drowned keep" or "Witch's hut")
             <input value={location} onChange={(e) => setLocation(e.target.value)} />
           </label>
           <label>
-            Development
+            Notes (optional, e.g. "Flooded to the second floor")
             <input value={development} onChange={(e) => setDevelopment(e.target.value)} />
           </label>
         </>

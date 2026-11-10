@@ -23,7 +23,6 @@ S a few hours, M a day or two, L several days.
 
 | # | Item | Area | Waiting on | Depends on | Size |
 |---|---|---|---|---|---|
-| 3 | GM editing of unrevealed hexes | Overland map | Claude: ready (a few design questions) | | M |
 | 4 | Encounter rollers for dungeons, and the Tavern table | Sites | Claude: ready | | S |
 | 5 | No repeated room text within one dungeon | Sites | Claude: ready | | S |
 | 6 | Site maps for Tombs, Ruins and Temples | Sites | User: a reference image per kind | | L |
@@ -37,11 +36,6 @@ S a few hours, M a day or two, L several days.
 | 14 | Island drawing for towns on Ocean hexes | Sites | User: a reference image | | M |
 
 ### Details
-
-**3. GM editing of unrevealed hexes.** GM editing (section 6) covers revealed hexes only, from
-the hex page's Edit form. This adds editing hexes ahead of the party from the GM view. To
-settle first: how the GM picks a hex and terrain there, and whether edited unrevealed hexes
-are protected from later re-solves.
 
 **4. Encounter rollers for dungeons, and the Tavern table.** The Cave, Deep Tunnels, Ruins and
 Tavern d100 tables exist, but no screen uses them. `DungeonSiteView` has no encounter roller;
@@ -109,6 +103,7 @@ scale (6 miles per hex, user, 2026-11-05; see Decisions),
 map_generator's 1a (replaced by WFC and biome noise; its targets hold, see section 2),
 the open question of whether anchors replace or add to the d200 (add, M6), and the fog look
 in 3D (grey silhouettes, M4).
+Item 3, GM planning of unrevealed hexes, was finished 2026-11-10 (section 6).
 Map_generator's 1b and 1c became item 2 (1b's river code was ported on 2026-11-06; item 2
 finished 2026-11-10, see HISTORY.md); its "later" island drawing is item 14.
 
@@ -352,7 +347,11 @@ spread between worlds is wide by design: some are wetter, colder or more mountai
 
 ### 6. GM editing
 
-- Edit Hex keeps map_generator's terrain, danger and POI fields, for revealed hexes. Terrains
+- Edit Hex keeps map_generator's terrain, danger and Danger Level fields, for revealed hexes.
+  Its point of interest (item 3, 2026-11-10) is "keep as it is" by default, which leaves the
+  POI and its generated site alone, or none, or a row picked from the d200 Feature table
+  (`featureOptions.ts`; the POI is built from that row as a rolled one would be, so it routes to
+  the right site generator), or a custom name and notes. Terrains
   fall into shape classes (Ocean, Coast, Hills, Mountain, flat land). A change between
   flat-land biomes is a label only: the biome comes from moisture and temperature, and the 2D
   color, 3D tint and scenery follow the hex's terrain. A change of class pins the hex's tile to
@@ -370,12 +369,26 @@ spread between worlds is wide by design: some are wetter, colder or more mountai
   Open water needs water or shoreline on all six sides, and a Mountain can't rise from a
   revealed neighbor's level in one step.
 - No river or lake controls, as in map_generator's 1a plan.
+- **Planning unrevealed hexes** (punch-list item 3; decided by the user, 2026-11-10): in GM view,
+  double-clicking a dimmed (solved, unrevealed) hex in 2D or 3D opens its hex page in a planning
+  view (`PlannedHexView`). The GM can set its terrain, danger, Danger Level and point of
+  interest (a row picked from the d200 Feature table, whose details are rolled from that row at
+  reveal so it gets the right site; or a custom name and notes); each defaults to "roll at reveal" (the tile's terrain, the neighbor-relative Danger
+  Level), so the GM can plan only what matters. A planned terrain reshapes the tile exactly as
+  an edit of a revealed hex does, mismatch flag included. When the party reveals the hex,
+  `MOVE_PARTY_TO` uses the plan instead of rolling and drops it. A planned hex is locked like a
+  revealed one: chunk growth and GM edits nearby never reshape it, only planning it again. Only
+  solved hexes can be planned, not the fog beyond. GM view shows a planned hex's terrain, a
+  yellow ring (red and dashed on a mismatch) and a dot for a planned point of interest; the
+  players' view shows nothing. Double-clicking an adjacent unrevealed hex in GM view now opens
+  its plan rather than moving the party; a single click still moves.
 
 ### 7. Saving
 
 - One localStorage document, `wfc-hex-crawl:map`, written after every state change:
-  `{ version, world: { seed, offsetX, offsetY }, chunks: [chunkKey], tiles: { hexId: [type, rotation, level] }, hexes: { hexId: Hex }, partyHexId, selectedHexId }`.
-  `hexes` holds only revealed hexes. Two more keys hold per-browser view choices:
+  `{ version, world: { seed, offsetX, offsetY }, chunks: [chunkKey], tiles: { hexId: [type, rotation, level] }, hexes: { hexId: Hex }, planned: { hexId: PlannedHex }, partyHexId, selectedHexId }`.
+  `hexes` holds only revealed hexes; `planned` the GM's plans for unrevealed ones (section 6;
+  a save from before it loads with none). Two more keys hold per-browser view choices:
   `wfc-hex-crawl:gmView` (GM view) and `wfc-hex-crawl:view3d` (3D view).
 - Tiles are stored, not re-derived from the seed. Solves depend on the order chunks were
   grown, so replaying the seed alone isn't reliable. Tile type ids are indexes into
@@ -450,7 +463,8 @@ src/
   state/       ← mapReducer, MapContext, useChunkGrowth, testWorld (test fixture),
                  ReviewWaterContext (the /poi page's picked water)
   persistence/ ← localStorage.ts: the save and campaign files
-  components/, routes/  ← from map_generator, plus the Campaign menu and start dialog
+  components/, routes/  ← from map_generator, plus the Campaign menu, start dialog and the
+                 planning view for unrevealed hexes (hexdetail/PlannedHexView.tsx)
   App.tsx      ← routes, the 2D/3D and GM view toggles, lazy-loads the 3D view
 ```
 
@@ -460,7 +474,8 @@ src/
   main bundle.
 - **Hex orientation:** pointy-top throughout, as hex-map-wfc's models are built. map_generator
   was flat-top; the settlement map's water side maps tile edges to its own angles.
-- **Routes:** `/` (the overland map), `/hex/:hexId` (the hex detail page) and `/poi/:n` (the
+- **Routes:** `/` (the overland map), `/hex/:hexId` (the hex detail page; for a solved,
+  unrevealed hex, the GM's planning view) and `/poi/:n` (the
   POI review page, which has no map hex; its water picker passes a tile's water edges to
   `SettlementView` through `ReviewWaterContext`, outside the map state).
 
@@ -473,15 +488,16 @@ every change (section 7). The reducer is synchronous, so it can't wait on the wo
 - **In the worker,** for the starting world and chunk growth. The worker keeps no state: each
   request carries the world params and the tiles near the chunk, and the whole solve runs
   inside it. The caller then dispatches the result.
-- **In the reducer, on the main thread,** for GM edits: `EDIT_HEX` calls `pinHex`. So the WFC
-  solver is in the main bundle too.
+- **In the reducer, on the main thread,** for GM edits: `EDIT_HEX` and `PLAN_HEX` call
+  `pinHex`. So the WFC solver is in the main bundle too.
 
 | Action | Dispatched by | What it does |
 |---|---|---|
 | `START_MAP` | the start dialog, after `createStartingWorld` | sets the solved world and reveals the start hex |
-| `MOVE_PARTY_TO` | a map click, or the hex page | moves the party; into an unrevealed hex, reveals it and rolls its game data |
+| `MOVE_PARTY_TO` | a map click, or the hex page | moves the party; into an unrevealed hex, reveals it and rolls its game data (using the GM's plan where there is one, then dropping it) |
 | `ADD_CHUNK` | `useChunkGrowth` | applies a grown chunk's tiles |
 | `EDIT_HEX` | the hex page's Edit form | edits a hex; a terrain change may reshape its tile (`pinHex`) |
+| `PLAN_HEX`, `CLEAR_PLAN` | the planning view (an unrevealed hex's page) | sets or drops the GM's plan for an unrevealed hex; a planned terrain may reshape its tile (`pinHex`) |
 | `REROLL_HEX` | the hex page | re-rolls danger and the POI; an anchor hex stays a settlement |
 | `LOAD_MAP` | the Campaign menu and start screen | replaces the campaign with a checked file |
 | `SELECT_HEX`, `GENERATE_SITE`, `REROLL_SITE`, `NEW_MAP` | as in map_generator | |
@@ -489,9 +505,11 @@ every change (section 7). The reducer is synchronous, so it can't wait on the wo
 - **Chunk growth** (`useChunkGrowth`, on the overland screen): whenever the state changes, the
   nearest unsolved chunk near the party is solved in the worker and dispatched. One solve at a
   time, so each starts from the latest tiles. A chunk that fails is skipped for the session.
-- **Revealed hexes are guarded twice:** `isLocked` inside the solver (section 1), then
-  `applyChunkResult`, which drops any update to a revealed hex before it reaches the state.
-  `ADD_CHUNK` and `EDIT_HEX` both go through it (`EDIT_HEX` exempts the edited hex).
+- **Revealed and planned hexes are guarded twice** (`isLockedHex`, `lockedHexIds`): `isLocked`
+  inside the solver (section 1; `useChunkGrowth` sends both kinds as locked keys), then
+  `applyChunkResult`, which drops any update to a locked hex before it reaches the state.
+  `ADD_CHUNK`, `EDIT_HEX` and `PLAN_HEX` all go through it (the last two exempt the hex being
+  edited or planned).
 - **Saved versus derived:** edges, lakes and anchors are derived from the tile when needed,
   never saved. Terrain is derived too, except that a revealed hex saves its terrain with its
   game data, since a GM edit can make it a label over another tile shape (section 6). Section 7
@@ -537,8 +555,9 @@ every change (section 7). The reducer is synchronous, so it can't wait on the wo
 
 - **Revealed hexes can't be changed.** Re-solves next to revealed ground have little room:
   chunk growth avoids it by growing early (section 4), and GM edits fall back to the nearest
-  shape and flag a mismatch (section 6). Editing unrevealed hexes (punch-list item 3) will face
-  the same limit.
+  shape and flag a mismatch (section 6). Planned hexes (section 6) are locked too, and unlike
+  revealed ones can sit at the edge of the solved area: measured, 10 planned hexes beside each
+  new chunk caused no drops in 120 solves, 40 caused drops in 3.
 - **Small tile set.** It has no swamp, desert, forest or lake tiles. Biome tinting and
   decorations make these readable in 3D, and the 2D view relies on fill color plus icons.
 - **WebGPU support.** Safari and Firefox support varies. The 2D view is always available, and

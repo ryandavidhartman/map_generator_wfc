@@ -440,6 +440,58 @@ edges sent through `waterForEdges`, kept out of saves, the map labeled with tile
 - The spec's "Later: a true island drawing for towns on Ocean hexes" became punch-list item 14
   (user, 2026-11-10).
 
+### Item 3: GM planning of unrevealed hexes (2026-11-10, pushed straight to main at the user's request)
+
+Claude asked four questions; the user decided (2026-11-10): the GM can plan terrain, danger
+(and Danger Level) and point of interest, all of the Edit form; planned hexes are protected
+like revealed ones; the editor opens by double-clicking a dimmed hex in GM view; only solved
+hexes can be planned, not the fog beyond.
+
+- **State:** `MapState.planned` (hex id → `PlannedHex`), saved with the campaign. A save from
+  before it loads with none (`withMapStateDefaults`), so no format bump. Each field is optional
+  and means "use this at reveal"; left out, it rolls as before (`poi: null` means "none").
+- **Actions:** `PLAN_HEX` (replaces a plan; a planned terrain reshapes the tile through
+  `pinHex` exactly as `EDIT_HEX` does, mismatch flag included) and `CLEAR_PLAN` (the tile keeps
+  any reshaping). `MOVE_PARTY_TO` builds the revealed hex from the plan where it has one and
+  drops the plan.
+- **Point of interest:** the first version copied the revealed-hex Edit form's free-text
+  Location and Development fields; the user found them confusing ("I don't know what to enter
+  for Location and Development"). Now the GM picks a row of the d200 Feature table
+  (`poiFeature`, listed by `locationFeatureRows` with its kind and d200 range), and the reveal
+  builds the POI from that row with `pointOfInterestForFeatureRoll`, so a planned Town gets a
+  rolled name and the settlement generator. "Custom" keeps free text, relabeled Name and Notes,
+  with a hint that its site is a dungeon unless the name is exactly Village, Town, City or
+  Metropolis (`generateSiteForHex`'s fallback).
+- **The revealed-hex Edit form got the same picker** (user, 2026-11-10: "fix the revealed-hex
+  Edit form too"); the pick list moved to `hexdetail/featureOptions.ts`. `EDIT_HEX` takes a
+  `poiFeature` in its patch and builds the POI from that row (not saved on the hex). The form's
+  point of interest now defaults to "keep as it is": before, every Save resent the POI, so even
+  a terrain or danger change wiped the hex's generated site (Claude noticed while changing it).
+  Browser check: picking "Barrow mounds" on the start hex saved a Tomb dungeon POI and
+  generated a Tomb site. An empty plan reveals exactly as an unplanned hex would (same dice).
+- **Locking:** `isLockedHex` / `lockedHexIds` (revealed or planned) replace "is revealed" in
+  every solve guard: the worker's locked keys for chunk growth, `applyChunkResult` in
+  `ADD_CHUNK`, and the re-solve around `EDIT_HEX` and `PLAN_HEX`. A planned hex, unlike a
+  revealed one, can sit at the very edge of the solved area, so the cost was measured (Claude's
+  check, 10 worlds × 12 edge chunks): with 10 planned hexes within 2 of each new chunk, no
+  drops; with 40, drops in 3 of 120 solves (5 cells). Without plans, none.
+- **UI:** `/hex/:id` for a solved, unrevealed hex shows `PlannedHexView` (the plan, Edit plan,
+  Clear plan). 2D GM view: a planned hex shows its planned terrain, a yellow ring (red and
+  dashed on a mismatch) and a dot for a planned POI, with a "Planned: …" tooltip. 3D GM view:
+  the planned terrain's tint and the mismatch ring; double-click opens the plan there too.
+  Players' view shows nothing. Side effect: in GM view, double-clicking an adjacent unrevealed
+  hex opens its plan instead of moving the party (a single click still moves).
+- **Tests:** plannedHexes.test.ts (14: plan/clear, a planned Feature row revealing as that
+  row's site kind, refusals, label-only and reshaping terrain,
+  the reveal, locks against GM edits with a control showing the same edit reshapes those
+  hexes when unplanned, `ADD_CHUNK` skipping a planned hex, older saves). The route test's
+  "missing hex" moved to an unsolved id, since a solved one now opens the planning view.
+  1,521 tests pass (with an `EDIT_HEX` Feature-row test in mapReducer.test.ts). Browser check (2D, seed "plan-test"): double-click an unrevealed hex 2 east
+  of the party in GM view, plan Swamp / Deadly / "Drowned keep", see the ring and tooltip, walk
+  the party in: the hex revealed with exactly the plan, and the plan was gone. After the Feature
+  picker: planning "Town" revealed a Town routed to the settlement generator (named Stagford). The 3D
+  double-click wasn't checked in a browser.
+
 ## Risks, as written during the build
 
 PLAN.md's Risks section has them as they stand now.

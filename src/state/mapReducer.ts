@@ -1,6 +1,7 @@
 import type { Rng } from '../engine/dice'
 import {
   generateHexDetails,
+  pointOfInterestForFeatureRoll,
   rollAnchorSettlement,
   rollDangerLevel,
   rollPointOfInterest,
@@ -34,6 +35,21 @@ export type Hex = {
   tileMismatch?: boolean
 }
 
+// A GM's plan for a solved hex the party hasn't revealed yet (PLAN.md punch-list item 3). Used
+// at reveal instead of rolling; anything left out still rolls then. A planned hex is locked like
+// a revealed one: chunk growth and nearby GM edits never reshape it (lockedHexIds).
+export type PlannedHex = {
+  terrain?: Terrain // the terrain label; left out, the tile's own terrain
+  danger?: DangerLevel
+  dangerLevel?: number // left out, worked out from the revealed neighbors at reveal
+  poi?: PointOfInterest | null // left out: rolled at reveal; null: none; else this custom POI
+  // A row of the d200 Feature table (any roll in it): at reveal its POI is built from that row
+  // exactly as a rolled one would be (pointOfInterestForFeatureRoll), so it routes to the right
+  // site generator. Takes the place of `poi` when set.
+  poiFeature?: number
+  tileMismatch?: boolean // as on Hex: the tile couldn't be reshaped to `terrain`
+}
+
 // Bumped when the save format changes in a way old saves can't be read with. A save with any
 // other version starts a new map (all saves so far are test data, so nothing is migrated).
 export const SAVE_VERSION = 1
@@ -49,6 +65,9 @@ export type MapState = {
   tiles: SavedTiles
   // Revealed hexes and their game data, rolled at reveal.
   hexes: Record<string, Hex>
+  // The GM's plans for unrevealed solved hexes, by hex id (item 3). Older saves have none
+  // (withMapStateDefaults fills it in).
+  planned: Record<string, PlannedHex>
   partyHexId: string | null
   selectedHexId: string | null
 }
@@ -59,6 +78,7 @@ export const EMPTY_MAP_STATE: MapState = {
   chunks: [],
   tiles: {},
   hexes: {},
+  planned: {},
   partyHexId: null,
   selectedHexId: null,
 }
@@ -73,7 +93,9 @@ export function withMapStateDefaults(loaded: Partial<MapState> | null): MapState
   return { ...EMPTY_MAP_STATE, ...loaded }
 }
 
-export type HexEditPatch = Partial<Pick<Hex, 'terrain' | 'danger' | 'dangerLevel' | 'poi'>>
+// `poiFeature`: a row of the d200 Feature table (any roll in it); the hex's POI is built from it
+// as a rolled one would be (pointOfInterestForFeatureRoll), in place of `poi`.
+export type HexEditPatch = Partial<Pick<Hex, 'terrain' | 'danger' | 'dangerLevel' | 'poi'>> & { poiFeature?: number }
 
 // New hexes' Danger Level is neighbor-relative, not an independent roll: base = the rounded
 // average of already-revealed neighbors' own dangerLevel (1 if this hex has none, i.e. the
@@ -96,12 +118,16 @@ export type MapAction =
   | { type: 'START_MAP'; world: WorldParams; chunks: string[]; tiles: SavedTiles; startHexId: string; rng?: Rng }
   | { type: 'MOVE_PARTY_TO'; hexId: string; rng?: Rng }
   // A chunk solved by the worker (world/growth.ts): its tiles, plus any unrevealed hexes nearby
-  // that the solve adjusted. Never changes a revealed hex.
+  // that the solve adjusted. Never changes a revealed or planned hex.
   | { type: 'ADD_CHUNK'; chunk: string; updates: PlacedTile[] }
   | { type: 'SELECT_HEX'; hexId: string }
   | { type: 'REROLL_HEX'; hexId: string; rng?: Rng }
   // A terrain change also reshapes the hex's tile and the unrevealed hexes near it (world/pin.ts).
   | { type: 'EDIT_HEX'; hexId: string; patch: HexEditPatch; rng?: Rng }
+  // Plan a solved, unrevealed hex (replacing any earlier plan); a terrain change reshapes its
+  // tile as EDIT_HEX does. CLEAR_PLAN drops the plan (the tile keeps any reshaping).
+  | { type: 'PLAN_HEX'; hexId: string; plan: PlannedHex; rng?: Rng }
+  | { type: 'CLEAR_PLAN'; hexId: string }
   | { type: 'GENERATE_SITE'; hexId: string; rng?: Rng }
   | { type: 'REROLL_SITE'; hexId: string; rng?: Rng }
   | { type: 'NEW_MAP' }
@@ -111,6 +137,20 @@ export type MapAction =
 
 export function isRevealed(state: MapState, id: string): boolean {
   return id in state.hexes
+}
+
+// Hexes no solve may change: revealed ones and the GM's planned ones.
+export function isLockedHex(state: MapState, id: string): boolean {
+  return id in state.hexes || id in state.planned
+}
+
+export function lockedHexIds(state: MapState): string[] {
+  return [...Object.keys(state.hexes), ...Object.keys(state.planned)]
+}
+
+// Whether the GM can plan this hex: solved and not revealed (item 3).
+export function isPlannable(state: MapState, id: string): boolean {
+  return Boolean(state.world) && isSolved(state, id) && !isRevealed(state, id)
 }
 
 export function isAdjacentToParty(state: MapState, id: string): boolean {
@@ -158,6 +198,7 @@ export function mapReducer(state: MapState, action: MapAction): MapState {
         chunks: action.chunks,
         tiles: action.tiles,
         hexes: { [id]: startHex },
+        planned: {},
         partyHexId: id,
         selectedHexId: id,
       }
@@ -172,15 +213,35 @@ export function mapReducer(state: MapState, action: MapAction): MapState {
       }
 
       const coord = parseHexId(action.hexId)
-      const terrain = terrainAt(state, action.hexId)
+      // A GM's plan (item 3) stands in for whatever it sets; the rest rolls as usual.
+      const plan = state.planned[action.hexId]
+      const terrain = plan?.terrain ?? terrainAt(state, action.hexId)
       if (!terrain) return state
 
-      const details = generateHexDetails(terrain, action.rng, isAnchorHex(state.tiles, action.hexId))
-      const dangerLevel = computeHexDangerLevel(state, coord, details.danger)
-      const newHex: Hex = { id: action.hexId, q: coord.q, r: coord.r, ...details, dangerLevel }
+      const rolled = generateHexDetails(terrain, action.rng, isAnchorHex(state.tiles, action.hexId))
+      const danger = plan?.danger ?? rolled.danger
+      const poi = plan?.poiFeature
+        ? pointOfInterestForFeatureRoll(terrain, plan.poiFeature, action.rng)
+        : plan && plan.poi !== undefined
+          ? (plan.poi ?? undefined)
+          : rolled.poi
+      const dangerLevel = plan?.dangerLevel ?? computeHexDangerLevel(state, coord, danger)
+      const newHex: Hex = {
+        id: action.hexId,
+        q: coord.q,
+        r: coord.r,
+        terrain,
+        danger,
+        dangerLevel,
+        ...(poi ? { poi } : {}),
+        ...(plan?.tileMismatch ? { tileMismatch: true } : {}),
+      }
+      const planned = { ...state.planned }
+      delete planned[action.hexId]
 
       return {
         ...state,
+        planned,
         hexes: { ...state.hexes, [action.hexId]: newHex },
         partyHexId: action.hexId,
         selectedHexId: action.hexId,
@@ -189,7 +250,7 @@ export function mapReducer(state: MapState, action: MapAction): MapState {
 
     case 'ADD_CHUNK': {
       if (!state.world || state.chunks.includes(action.chunk)) return state
-      const { tiles } = applyChunkResult(state.tiles, action.updates, (id) => id in state.hexes)
+      const { tiles } = applyChunkResult(state.tiles, action.updates, (id) => isLockedHex(state, id))
       return { ...state, chunks: [...state.chunks, action.chunk], tiles }
     }
 
@@ -218,14 +279,16 @@ export function mapReducer(state: MapState, action: MapAction): MapState {
     case 'EDIT_HEX': {
       const hex = state.hexes[action.hexId]
       if (!hex) return state
-      const patchTouchesPoi = 'poi' in action.patch
+      const { poiFeature, ...patch } = action.patch
+      if (poiFeature) patch.poi = pointOfInterestForFeatureRoll(patch.terrain ?? hex.terrain, poiFeature, action.rng ?? Math.random)
+      const patchTouchesPoi = 'poi' in patch
       let tiles = state.tiles
       let tileMismatch = hex.tileMismatch
       const terrain = action.patch.terrain
       if (terrain && terrain !== hex.terrain && state.world && hex.id in state.tiles) {
-        const pin = pinHex(state.world, state.tiles, hex.id, terrain, (id) => id in state.hexes, action.rng ?? Math.random)
+        const pin = pinHex(state.world, state.tiles, hex.id, terrain, (id) => isLockedHex(state, id), action.rng ?? Math.random)
         // An exact fit, or the closest shape that fits (the label then stays a mismatch).
-        if (pin.ok || pin.approximate) tiles = applyChunkResult(state.tiles, pin.updates, (id) => id !== hex.id && id in state.hexes).tiles
+        if (pin.ok || pin.approximate) tiles = applyChunkResult(state.tiles, pin.updates, (id) => id !== hex.id && isLockedHex(state, id)).tiles
         tileMismatch = pin.ok ? undefined : true
       }
       return {
@@ -235,12 +298,40 @@ export function mapReducer(state: MapState, action: MapAction): MapState {
           ...state.hexes,
           [action.hexId]: {
             ...hex,
-            ...action.patch,
+            ...patch,
             ...(patchTouchesPoi ? { site: undefined } : {}),
             tileMismatch,
           },
         },
       }
+    }
+
+    case 'PLAN_HEX': {
+      if (!state.world || !isPlannable(state, action.hexId)) return state
+      const id = action.hexId
+      let tiles = state.tiles
+      let tileMismatch = state.planned[id]?.tileMismatch
+      const terrain = action.plan.terrain
+      if (terrain) {
+        // As EDIT_HEX: reshape the tile when the shape class changes; other planned and
+        // revealed hexes are locked, this one isn't.
+        const pin = pinHex(state.world, state.tiles, id, terrain, (other) => other !== id && isLockedHex(state, other), action.rng ?? Math.random)
+        if (pin.ok || pin.approximate) tiles = applyChunkResult(state.tiles, pin.updates, (other) => other !== id && isLockedHex(state, other)).tiles
+        tileMismatch = pin.ok ? undefined : true
+      } else {
+        tileMismatch = undefined
+      }
+      const plan: PlannedHex = { ...action.plan }
+      if (tileMismatch) plan.tileMismatch = true
+      else delete plan.tileMismatch
+      return { ...state, tiles, planned: { ...state.planned, [id]: plan } }
+    }
+
+    case 'CLEAR_PLAN': {
+      if (!(action.hexId in state.planned)) return state
+      const planned = { ...state.planned }
+      delete planned[action.hexId]
+      return { ...state, planned }
     }
 
     case 'GENERATE_SITE': {

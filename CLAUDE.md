@@ -25,9 +25,11 @@ Code comments citing "punch-list 1a" mean that old punch list.
   orientation throughout.
 - Revealed hexes never change: no WFC re-solve, chunk growth or recovery step may change a
   revealed hex's tile or terrain. The one exception is the GM editing that hex directly (the
-  Edit form pins its tile); its revealed neighbors still never change.
+  Edit form pins its tile); its revealed neighbors still never change. Hexes the GM has
+  planned (`planned`, punch-list item 3) are locked the same way (`isLockedHex`).
 - Hex game data (danger, `dangerLevel`, point of interest) is rolled at reveal, not when the
-  map is generated. Terrain comes from the tile (`geoAt`); `hexes` holds only revealed hexes.
+  map is generated, except whatever the GM planned for the hex, which the reveal uses instead.
+  Terrain comes from the tile (`geoAt`); `hexes` holds only revealed hexes.
 - Saved maps store tile type ids, which are indexes into `TILE_LIST`. Reordering or removing
   tiles breaks saves. The save key is `wfc-hex-crawl:map`, separate from map_generator's on
   localhost:5173.

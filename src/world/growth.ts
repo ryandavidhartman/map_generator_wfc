@@ -5,7 +5,11 @@
 // unsolved chunks covering that disk are solved one at a time, nearest first, in the worker.
 // Revealed hexes are locked (isLocked): a solve may unfix or re-solve unrevealed hexes near the
 // new chunk's border, but never a revealed one. The reducer applies a result with
-// applyChunkResult, which also refuses to touch a revealed hex, as a second guard.
+// applyChunkResult, which also refuses to touch a revealed hex, as a second guard. Hexes the GM
+// has planned (PLAN.md punch-list item 3) are locked the same way: the callers pass both
+// (mapReducer.ts lockedHexIds, isLockedHex). Unlike revealed hexes, a planned one can sit right
+// at the edge of the solved area; measured over 10 worlds x 12 edge chunks, 10 locked hexes
+// within 2 of each new chunk caused no drops, 40 caused drops in 3 of 120 solves.
 //
 // Why 8: a new chunk's solve can change existing tiles up to a few hexes outside it (unfixing,
 // Local-WFC patches, river-loop breaking). With every revealed hex within 1 of a party
@@ -36,9 +40,9 @@ export function chunksToGrow(solvedChunks: readonly string[], partyHexId: string
   return [...best.values()].sort((a, b) => a.d - b.d || chunkKey(a.chunk).localeCompare(chunkKey(b.chunk))).map((b) => b.chunk)
 }
 
-// The cube keys the solver must not change: every revealed hex.
-export function lockedKeys(revealedHexIds: Iterable<string>): string[] {
-  return [...revealedHexIds].map((id) => {
+// The cube keys the solver must not change: every revealed (and planned) hex.
+export function lockedKeys(lockedHexIds: Iterable<string>): string[] {
+  return [...lockedHexIds].map((id) => {
     const c = cubeOfHexId(id)
     return `${c.q},${c.r},${c.s}`
   })

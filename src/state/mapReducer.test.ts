@@ -158,6 +158,17 @@ describe('mapReducer', () => {
     expect(state.hexes['0,0'].site).toBeUndefined()
   })
 
+  it('EDIT_HEX with a Feature table row builds that row\'s POI and clears the old site', () => {
+    let state: MapState = mapReducer(EMPTY_MAP_STATE, { ...startMapAction(), rng: fixedRng(0.15) })
+    state = mapReducer(state, { type: 'GENERATE_SITE', hexId: '0,0', rng: fixedRng(0) })
+    state = mapReducer(state, { type: 'EDIT_HEX', hexId: '0,0', patch: { poiFeature: 180 }, rng: fixedRng(0.3) })
+    const hex = state.hexes['0,0']
+    expect(hex.poi).toMatchObject({ location: 'Town', siteKind: 'settlement', forcedType: 'Town' })
+    expect(hex.poi?.settlementName).toBeTruthy()
+    expect(hex.site).toBeUndefined()
+    expect('poiFeature' in hex).toBe(false) // the patch's row isn't saved on the hex
+  })
+
   it('START_MAP keeps the solved world and starts on the given hex', () => {
     const state = mapReducer(EMPTY_MAP_STATE, { ...startMapAction('3,-1'), rng: fixedRng(0.99) })
     expect(state).toMatchObject({ version: SAVE_VERSION, world: FIXTURE_WORLD, chunks: ['0,0'], partyHexId: '3,-1' })
