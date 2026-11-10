@@ -10,12 +10,12 @@ A React web app for running overland hex crawls in OSR-style games. It combines 
   points of interest, and the generated sites (dungeons, settlements, towers, keeps, camps,
   shrines, rifts) with their maps.
 
-**Status (2026-11-05):** milestones M0-M8 are done; all open work is in the Punch list below.
+**Status (2026-11-10):** milestones M0-M8 are done; all open work is in the Punch list below.
 This file describes the system as it is. How it was built, with the measurements and bug
 fixes along the way, is in [`HISTORY.md`](HISTORY.md). All numbers are starting points to tune
 by simulation.
 
-## Punch list (updated 2026-11-05)
+## Punch list (updated 2026-11-10)
 
 All open work, in one suggested order. **Waiting on** says who moves next: the user (a
 decision, a reference image or table content) or Claude (ready to build). Sizes are rough:
@@ -23,7 +23,6 @@ S a few hours, M a day or two, L several days.
 
 | # | Item | Area | Waiting on | Depends on | Size |
 |---|---|---|---|---|---|
-| 1 | Fewer roads: about 10% of land hexes | Overland map | Claude: ready | | S-M |
 | 2 | Town-map water from tile shapes (rivers done; mouth, lakes, /poi left) | Overland map | Claude: ready | | M |
 | 3 | GM editing of unrevealed hexes | Overland map | Claude: ready (a few design questions) | | M |
 | 4 | Encounter rollers for dungeons, and the Tavern table | Sites | Claude: ready | | S |
@@ -38,14 +37,6 @@ S a few hours, M a day or two, L several days.
 | 13 | NPC activity that fits the profession | Sites | User: only if it bothers them in play | | S |
 
 ### Details
-
-**1. Fewer roads.** WFC puts roads on about 24% of land hexes, a lot for 6-mile wilderness
-hexes. Target (user, 2026-11-05): about 10%, by lowering the road tile weights in the world
-rules, measured with `npm run sim`. Roads are not drawing only: road ends, road junctions and
-river crossings are settlement anchors (about 6.4% of land, section 5), so fewer roads means
-fewer anchored settlements; measure the anchor share alongside and check it with the user.
-The change affects unsolved ground only, never solved hexes, and must keep "0 failed, 0
-dropped cells". Travel rates on roads are out of scope for now (user, 2026-11-05).
 
 **2. Town-map water from tile shapes.** The town map used to draw one straight river or one
 coast. A layout change that keeps the current look: no reference image, the user checks
@@ -170,7 +161,7 @@ As built. The original 2026-11-04 table is in HISTORY.md; the dates say when eac
 | GM editing | **Edit plus local re-solve, revealed hexes only** (2026-11-04; scope and fallback 2026-11-05). The GM changes a hex's terrain; WFC re-solves the *unrevealed* hexes within 2-4 to fit it, else the nearest shape that fits is used and the hex is flagged. Unrevealed hexes are punch-list item 3. |
 | 3D look | **Grey fog silhouettes; scenery follows terrain; buildings only on POI hexes; all four screen effects** (2026-11-05). Camera: hex-map-wfc's orbit controls, tilt limited. |
 | Saving | **localStorage: world seed, solved tiles, per-hex game data** (2026-11-04), plus save to / load from a file and player and GM PNG exports (2026-11-05). Mongo is punch-list item 8. |
-| Roads | **About 10% of land hexes** (2026-11-05; punch-list item 1). Travel rates on roads are out of scope. |
+| Roads | **About 10% of land hexes** (2026-11-05; done 2026-11-10 by weighting every road tile ×0.12, the user's choice over sparing anchor tiles). Travel rates on roads are out of scope. |
 
 ## Glossary
 
@@ -197,7 +188,7 @@ As built. The original 2026-11-04 table is in HISTORY.md; the dates say when eac
   tiles, so it isn't always (0, 0); if chunk 0 has none, a new seed is tried
   (`src/world/startWorld.ts`). From there the map grows by chunk (section 4).
 - Tiles come from hex-map-wfc's 34 active tile types × 6 rotations × up to 5 levels (about
-  900 states), with its edge rules and weights (river tiles ×1.6, section 2). Roads are part of
+  900 states), with its edge rules and weights (river tiles ×1.6, road tiles ×0.12, section 2). Roads are part of
   the same tiles, not a separate pass.
 - The solve runs in a Web Worker (`src/world/solver.worker.ts`), with hex-map-wfc's
   backtracking and recovery (unfixing, then Local-WFC, then dropping cells), steered by the
@@ -252,6 +243,11 @@ of the tile and the fields at its hex, so it's worked out when needed, not saved
   tiles one class higher hits the targets without that cost.
 - **River tiles are weighted ×1.6** over hex-map-wfc's weights, in the world's own rules
   (`getWorldRules`). Tile ids are unchanged, so saves aren't affected.
+- **Road tiles are weighted ×0.12** (`ROAD_WEIGHT`), every road tile alike, river crossings
+  included (user chose this over sparing the road ends and junctions that make settlement
+  anchors, 2026-11-10). It brings roads from about 24% of land to about 10% (user, 2026-11-05).
+  Like `RIVER_WEIGHT`, it changes only ground not yet solved. Travel rates on roads are out of
+  scope (user, 2026-11-05).
 - **River loops are broken** after every chunk solve (`src/world/rivers.ts`). WFC happily closes
   rivers into rings (about 7 per 4,100-hex world). A small patch on each ring is re-solved with
   river tiles banned in one cell. The patch always goes on a loop cell inside the new chunk
@@ -267,7 +263,9 @@ of the tile and the fields at its hex, so it's worked out when needed, not saved
   dialog's Random button rolls map_generator's 3d6 table (`terrainFor3d6`).
 
 **Measured** in M2 with `npm run sim -- --seeds 40` (40 worlds of 19 chunks, about 4,100 hexes
-each; 0 failed solves, 0 dropped cells, about 73 ms per chunk):
+each; 0 failed solves, 0 dropped cells, about 73 ms per chunk). Roads were cut afterwards
+(punch-list item 1, 2026-11-10); the last four rows are from `npm run sim -- --seeds 30` with
+`ROAD_WEIGHT` 0.12 (0 failed, 0 dropped), and the terrain shares stayed within a point of these:
 
 | | Mean [min-max] | Target (map_generator's 1a) |
 |---|---|---|
@@ -279,10 +277,11 @@ each; 0 failed solves, 0 dropped cells, about 73 ms per chunk):
 | Hills | 12.0% [4.6-24.8] | 12.5% |
 | Mountain | 3.8% [0.7-10.7] | 2.1% |
 | biggest landmass / land | 96.0% [78.7-100] | ≥ 95% (some worlds have a large second island) |
-| rivers / land | 15.5% [9.1-25.3] | ~17% |
-| lakes / land | 5.2% [4.0-6.1] | ~5% |
+| rivers / land | 19.0% [10.5-27.3] (15.5% before roads were cut) | ~17% |
+| lakes / land | 6.2% [5.3-6.9] (5.2% before; more hexes have only grass edges) | ~5% |
 | one-hex ponds / inland water bodies | 1.3% | ≤ 5% |
-| roads / land | 23.8% | ~10% (user, 2026-11-05; punch-list item 1) |
+| roads / land | 9.6% [4.5-14.7] (23.8% before) | ~10% (user, 2026-11-05) |
+| settlement anchors / land | 2.2% [0.7-3.8] (6.4% before) | none set |
 
 Terrain shares are of land (everything but Ocean); open water is about 32% of the map. The
 spread between worlds is wide by design: some are wetter, colder or more mountainous.
@@ -328,12 +327,14 @@ spread between worlds is wide by design: some are wetter, colder or more mountai
 - On reveal, the 1-in-6 gate and the d200 Feature table run exactly as in map_generator,
   verbatim.
 - **Settlement anchors** (`src/world/anchors.ts`): a hex whose tile is a road end, a road
-  junction (3+ roads) or a river crossing is an anchor, about 6.4% of land hexes. It's read
+  junction (3+ roads) or a river crossing is an anchor, about 2.2% of land hexes (6.4% before
+  roads were cut to ~10%, 2026-11-10). It's read
   from the tile when the hex is revealed, so nothing is saved. An anchor hex becomes a
   settlement, its type re-rolled on the d200 until it lands on a settlement row
   (`rollAnchorSettlement`, generateHex.ts), so the type odds stay the table's. This applies on
   reveal, on the starting hex and on Reroll. Other hexes roll as before, so the d200 still gives
-  settlements anywhere: roughly 12% of revealed hexes end up settlements (6% without anchors).
+  settlements anywhere: roughly 8% of revealed hexes end up settlements (6% without anchors;
+  about 12% before roads were cut; worked out from the anchor share, not measured in play).
   Coast tiles never carry roads, so there are no coast anchors.
 - **3D markers** (`planPoiModels` in scenery.ts), placed in spots clear of the hex's road, river
   or water (`poiSlots`): settlements get KayKit buildings sized by type (Village 2 houses and a

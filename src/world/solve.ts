@@ -22,14 +22,23 @@ export const LOOKAHEAD_RINGS = 2
 // (punch-list 1a). Measured in M2 (30 worlds): x1 gave 13.7%, x1.6 16.1%, x2.2 19.1% with drops returning.
 export const RIVER_WEIGHT = 1.6
 
+// Road tiles are weighted down to bring roads from ~24% of land to ~10% (user, 2026-11-05;
+// PLAN.md punch-list item 1). Every road tile is scaled alike (user chose this over sparing road
+// ends and junctions, 2026-11-10). Measured over 30 worlds x 19 chunks: x1 gave roads 23.6% and
+// settlement anchors 6.4% of land; x0.12 roads 9.6%, anchors 2.2%, with rivers up from 16.2% to
+// 19.0% and lakes from 5.1% to 6.2% (more grass-only hexes). Lowering RIVER_WEIGHT to 1.3-1.4
+// didn't bring rivers back down, so it stays. A river crossing is both and gets both factors.
+export const ROAD_WEIGHT = 0.12
+
 const LOOP_PATCH_RADIUS = 2 // breakRiverLoops' default patch radius
 
 const isRiverTile = (type: number) => HEX_DIRS.some((d) => TILE_LIST[type].edges[d] === 'river')
+const isRoadTile = (type: number) => HEX_DIRS.some((d) => TILE_LIST[type].edges[d] === 'road')
 
 let worldRules: AdjacencyRules | null = null
 
 export function getWorldRules(): AdjacencyRules {
-  return (worldRules ??= new AdjacencyRules(undefined, (t) => TILE_LIST[t].weight * (isRiverTile(t) ? RIVER_WEIGHT : 1)))
+  return (worldRules ??= new AdjacencyRules(undefined, (t) => TILE_LIST[t].weight * (isRiverTile(t) ? RIVER_WEIGHT : 1) * (isRoadTile(t) ? ROAD_WEIGHT : 1)))
 }
 
 const masks = new WeakMap<WorldFields, MaskFor>()

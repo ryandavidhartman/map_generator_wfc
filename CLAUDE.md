@@ -10,7 +10,7 @@ then punch-list work since, with the measurements and bug fixes; code comments c
 entries there. `docs/ARCHITECTURE-CHECKLIST.md` ties every claim in PLAN.md's Architecture
 section to code; when a change makes one untrue, update both.
 
-**Status (2026-11-05):** milestones M0-M8 are done and merged; open work is PLAN.md's punch
+**Status (2026-11-10):** milestones M0-M8 are done and merged; open work is PLAN.md's punch
 list. The suite takes about 25-30 s, mostly the WFC and world tests.
 
 `docs/reference/map_generator-CLAUDE.md` is a snapshot of map_generator's CLAUDE.md as of the
@@ -54,9 +54,13 @@ Code comments citing "punch-list 1a" mean that old punch list.
   fixture world in `src/state/testWorld.ts`.
 - **Tuning the world:** `npm run sim -- --seeds N --rings R` grows N worlds and prints the
   terrain mix against the targets. The tuning constants are `WORLD_TUNING` (fields.ts),
-  `BIOME_TUNING` (terrain.ts) and `RIVER_WEIGHT` / `LOOKAHEAD_RINGS` (world/solve.ts). Any
-  tuning change must keep "0 failed, 0 dropped cells". Changing tuning alters how unsolved
-  parts of existing worlds come out, but never solved hexes.
+  `BIOME_TUNING` (terrain.ts) and `RIVER_WEIGHT` / `ROAD_WEIGHT` / `LOOKAHEAD_RINGS` (world/solve.ts). Any
+  tuning change must keep "0 failed, 0 dropped cells". The solve weights (`RIVER_WEIGHT`,
+  `ROAD_WEIGHT`, `LOOKAHEAD_RINGS`) change only the unsolved parts of existing worlds.
+  `WORLD_TUNING` and `BIOME_TUNING` also change solved hexes, because `deriveHexGeo` reads
+  them every time a hex is shown: a revealed hex keeps its saved terrain but can gain or
+  lose its lake, and an unrevealed solved hex can change terrain too. That breaks the
+  revealed-hexes invariant for saved games, so don't retune those two without asking the user.
 - **Town-map checks:** `npm run town-maps -- [--type Town] [--seed 7] [--rotation 0]
   [--tiles RIVER_B,COAST_A] [--png]` (scripts/townMaps.ts) renders the real `SettlementMapSvg`
   for no water, an Ocean hex and every water tile in `TILE_LIST`, the same town in each, into

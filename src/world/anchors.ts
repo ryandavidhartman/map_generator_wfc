@@ -4,7 +4,8 @@
 // (user decision 2026-11-05: "add", not "replace").
 //
 // An anchor is a road end (one road edge), a road junction (three or more), or a road crossing
-// a river. About 6.4% of land hexes (measured over 5 worlds of 19 chunks). The rule reads only
+// a river. About 2.2% of land hexes (30 worlds of 19 chunks, after roads were cut to ~10% in
+// punch-list item 1; 6.4% before). The rule reads only
 // the tile type, which never changes once a hex is revealed, so nothing is saved for it.
 // (PLAN.md also named coast hexes with a road; the tile set has no coast tile with a road.)
 

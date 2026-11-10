@@ -5,6 +5,7 @@ import { chunkKey, chunkNeighbors, type ChunkCoord } from '../wfc/chunks'
 import { CUBE_DIRS, cubeKey } from '../wfc/cube'
 import type { RegionSolveResult, TileStore } from '../wfc/recovery'
 import { createWorldFields, placeWorld, type WorldFields, type WorldParams } from './fields'
+import { isSettlementAnchor } from './anchors'
 import { solveWorldChunk } from './solve'
 import { findRiverLoops } from './rivers'
 import { deriveHexGeo, type HexGeo } from './terrain'
@@ -43,6 +44,7 @@ export type WorldStats = {
   biggestLandmassShare: number
   riverShareOfLand: number
   roadShareOfLand: number
+  anchorShareOfLand: number // settlement anchors (anchors.ts): road ends, junctions, river crossings
   lakeShareOfLand: number
   riverLoops: number // independent river cycles (rivers.ts breaks them; should be ~0)
 }
@@ -74,6 +76,7 @@ export function measureWorld(store: TileStore, fields: WorldFields): WorldStats 
     biggestLandmassShare: share(landmasses[0] ?? 0, land),
     riverShareOfLand: share(landHexes.filter((g) => g.riverEdges.length > 0).length, land),
     roadShareOfLand: share(landHexes.filter((g) => g.roadEdges.length > 0).length, land),
+    anchorShareOfLand: share([...store.entries()].filter(([k, t]) => geo.get(k)!.terrain !== 'Ocean' && isSettlementAnchor(t.type)).length, land),
     lakeShareOfLand: share(landHexes.filter((g) => g.lake).length, land),
     riverLoops: findRiverLoops(store, store.keys()).length,
   }

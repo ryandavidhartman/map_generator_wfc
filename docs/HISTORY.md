@@ -351,6 +351,43 @@ default. Each passed when run alone. Instead of raising one more per-test timeou
 now sets `test.testTimeout: 30_000` for the whole suite. Two full runs in a row then passed
 (1497 tests, about 60 s on this machine).
 
+### Item 1, fewer roads (2026-11-10, branch `fewer-roads`)
+
+Roads covered about 24% of land; the target was about 10% (user, 2026-11-05). `ROAD_WEIGHT`
+in world/solve.ts scales every road tile's weight in `getWorldRules`, the way `RIVER_WEIGHT`
+does for rivers. `npm run sim` now also prints settlement anchors as a share of land
+(`anchorShareOfLand` in stats.ts), since road ends, junctions and river crossings are anchors.
+
+Measured with `npm run sim -- --seeds 30` (19 chunks each; every run 0 failed, 0 dropped cells
+except where noted):
+
+| ROAD_WEIGHT | roads / land | anchors / land | rivers / land | lakes / land |
+|---|---|---|---|---|
+| 1 (before) | 23.6% | 6.4% | 16.2% | 5.1% |
+| 0.5 (10 worlds) | 18.1% | 4.7% | 16.7% | (1 dropped cell) |
+| 0.3 (10 worlds) | 15.4% | 3.8% | 17.4% | |
+| 0.2 (10 worlds) | 13.2% | 3.5% | 21.1% | |
+| **0.12** | **9.6%** | **2.2%** | **19.0%** | **6.2%** |
+| 0.1 | 8.5% | 1.9% | 19.3% | 6.2% |
+
+Two alternatives were tried to keep more anchors. Scaling only the plain road pieces (straights,
+bends, slopes) and leaving ends, junctions and crossings at full weight didn't cut roads (about
+18% at every weight from 0.2 to 0.07) and pushed rivers to 23-26%. Scaling plain pieces ×0.08
+and anchor tiles ×0.25 gave roads 9.6% and anchors 3.7%, but rivers 22.1% and roads ranging
+1.7-17.9% between worlds. Claude asked; the user chose the plain option (every road tile ×0.12),
+accepting about 22 anchored settlements per 1,000 land hexes instead of 64.
+
+Side effects, left as they are: rivers rose to about 19% (target ~17%) and lakes to about 6%
+(~5%). Lakes rose because more hexes have only grass edges. `lakeChance` was not lowered to
+compensate: lakes are derived from the tile and `BIOME_TUNING` each time a hex is shown, so
+changing it would add or remove lakes on revealed hexes in saved games. `RIVER_WEIGHT` 1.4 and
+1.3 still gave about 19% rivers (the spread between worlds swamps the effect), so it stays 1.6.
+
+CLAUDE.md said tuning changes never alter solved hexes. Claude found that true only for the
+solve weights: `deriveHexGeo` reads `WORLD_TUNING` and `BIOME_TUNING` each time a hex is shown,
+so changing them can move lakes on revealed hexes (whose terrain is saved) and terrain on
+unrevealed solved ones. The user asked for the line to be corrected.
+
 ## Risks, as written during the build
 
 PLAN.md's Risks section has them as they stand now.

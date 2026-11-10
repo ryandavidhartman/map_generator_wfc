@@ -10,6 +10,8 @@ Last run: 2026-11-05.
 Result: 58 claims; 55 held, and 3 errors from the trim itself were found and fixed (marked FIXED).
 Partial re-run 2026-11-06 (town-map rivers, punch-list item 2): rows 4 and 39 re-checked and
 their evidence updated, rows 4a and 39a added; both hold.
+Partial re-run 2026-11-10 (fewer roads, punch-list item 1): rows 15 and 18 re-checked after
+`ROAD_WEIGHT` went into `getWorldRules` and `anchorShareOfLand` into stats.ts; both hold.
 
 ## File tree
 
