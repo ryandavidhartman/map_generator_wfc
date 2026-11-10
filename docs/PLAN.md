@@ -264,8 +264,9 @@ of the tile and the fields at its hex, so it's worked out when needed, not saved
 
 **Measured** in M2 with `npm run sim -- --seeds 40` (40 worlds of 19 chunks, about 4,100 hexes
 each; 0 failed solves, 0 dropped cells, about 73 ms per chunk). Roads were cut afterwards
-(punch-list item 1, 2026-11-10); the last four rows are from `npm run sim -- --seeds 30` with
-`ROAD_WEIGHT` 0.12 (0 failed, 0 dropped), and the terrain shares stayed within a point of these:
+(punch-list item 1, 2026-11-10); the rivers, lakes, roads and anchors rows are from `npm run sim -- --seeds 30` with
+`ROAD_WEIGHT` 0.12 (0 failed, 0 dropped), and the terrain shares stayed within 1.3 points of
+these:
 
 | | Mean [min-max] | Target (map_generator's 1a) |
 |---|---|---|
@@ -333,8 +334,9 @@ spread between worlds is wide by design: some are wetter, colder or more mountai
   settlement, its type re-rolled on the d200 until it lands on a settlement row
   (`rollAnchorSettlement`, generateHex.ts), so the type odds stay the table's. This applies on
   reveal, on the starting hex and on Reroll. Other hexes roll as before, so the d200 still gives
-  settlements anywhere: roughly 8% of revealed hexes end up settlements (6% without anchors;
-  about 12% before roads were cut; worked out from the anchor share, not measured in play).
+  settlements anywhere: about 8% of land hexes end up settlements when revealed (5.9% from the
+  d200 alone; about 12% before roads were cut). Measured 2026-11-10 by running
+  `generateHexDetails` 20 times on every hex of 10 worlds of 19 chunks.
   Coast tiles never carry roads, so there are no coast anchors.
 - **3D markers** (`planPoiModels` in scenery.ts), placed in spots clear of the hex's road, river
   or water (`poiSlots`): settlements get KayKit buildings sized by type (Village 2 houses and a

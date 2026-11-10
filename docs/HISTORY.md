@@ -333,7 +333,7 @@ gained the headless-Chromium technique (previously only in Claude's session memo
 "Working with the user" section; PLAN.md item 2 got a self-contained spec for the /poi water
 picker in place of a pointer to map_generator's `poiReviewRiver.ts`.
 
-### Town baseline hashes on arm64 (2026-11-06, branch `baseline-float-hash`)
+### Town baseline hashes on arm64 (2026-11-06, branch `baseline-float-hash`, merged as PR #5)
 
 On another machine (an Ubuntu instance under OrbStack on a Mac), `npm test` failed 161 of the
 288 cases in `settlementPlanBaseline.test.ts`, and nothing else. The test hashed the plan's
@@ -351,7 +351,7 @@ default. Each passed when run alone. Instead of raising one more per-test timeou
 now sets `test.testTimeout: 30_000` for the whole suite. Two full runs in a row then passed
 (1497 tests, about 60 s on this machine).
 
-### Item 1, fewer roads (2026-11-10, branch `fewer-roads`)
+### Item 1, fewer roads (2026-11-10, pushed straight to main as 262426a at the user's request)
 
 Roads covered about 24% of land; the target was about 10% (user, 2026-11-05). `ROAD_WEIGHT`
 in world/solve.ts scales every road tile's weight in `getWorldRules`, the way `RIVER_WEIGHT`
@@ -361,14 +361,14 @@ does for rivers. `npm run sim` now also prints settlement anchors as a share of 
 Measured with `npm run sim -- --seeds 30` (19 chunks each; every run 0 failed, 0 dropped cells
 except where noted):
 
-| ROAD_WEIGHT | roads / land | anchors / land | rivers / land | lakes / land |
-|---|---|---|---|---|
-| 1 (before) | 23.6% | 6.4% | 16.2% | 5.1% |
-| 0.5 (10 worlds) | 18.1% | 4.7% | 16.7% | (1 dropped cell) |
-| 0.3 (10 worlds) | 15.4% | 3.8% | 17.4% | |
-| 0.2 (10 worlds) | 13.2% | 3.5% | 21.1% | |
-| **0.12** | **9.6%** | **2.2%** | **19.0%** | **6.2%** |
-| 0.1 | 8.5% | 1.9% | 19.3% | 6.2% |
+| ROAD_WEIGHT | roads / land | anchors / land | rivers / land | lakes / land | note |
+|---|---|---|---|---|---|
+| 1 (before) | 23.6% | 6.4% | 16.2% | 5.1% | |
+| 0.5 | 18.1% | 4.7% | 16.7% | not recorded | 10 worlds; 1 dropped cell |
+| 0.3 | 15.4% | 3.8% | 17.4% | not recorded | 10 worlds |
+| 0.2 | 13.2% | 3.5% | 21.1% | not recorded | 10 worlds |
+| **0.12** | **9.6%** | **2.2%** | **19.0%** | **6.2%** | chosen |
+| 0.1 | 8.5% | 1.9% | 19.3% | 6.2% | |
 
 Two alternatives were tried to keep more anchors. Scaling only the plain road pieces (straights,
 bends, slopes) and leaving ends, junctions and crossings at full weight didn't cut roads (about
@@ -376,6 +376,16 @@ bends, slopes) and leaving ends, junctions and crossings at full weight didn't c
 and anchor tiles ×0.25 gave roads 9.6% and anchors 3.7%, but rivers 22.1% and roads ranging
 1.7-17.9% between worlds. Claude asked; the user chose the plain option (every road tile ×0.12),
 accepting about 22 anchored settlements per 1,000 land hexes instead of 64.
+
+Settlements overall, measured afterwards by running `generateHexDetails` 20 times on every hex
+of 10 worlds: 8.0% of land hexes get one when revealed (7.3% counting Ocean), against about 12%
+before. The d200 alone gives 5.9% (1-in-6 gate × 71 settlement rows of 200), so anchors now add
+about 2 points instead of 6.
+
+Claude showed the user before/after 2D renders of seeds 3 and 11 (roads 22.6% → 4.8% and
+25.3% → 14.5%: the remaining roads are long routes rather than a mesh). Every weight change
+reshuffles the whole generated map, not only its roads, but never anything already solved.
+Tests: 1,497 passed; `tsc -b` and the scripts' typecheck clean.
 
 Side effects, left as they are: rivers rose to about 19% (target ~17%) and lakes to about 6%
 (~5%). Lakes rose because more hexes have only grass edges. `lakeChance` was not lowered to

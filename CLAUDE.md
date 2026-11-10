@@ -11,7 +11,8 @@ entries there. `docs/ARCHITECTURE-CHECKLIST.md` ties every claim in PLAN.md's Ar
 section to code; when a change makes one untrue, update both.
 
 **Status (2026-11-10):** milestones M0-M8 are done and merged; open work is PLAN.md's punch
-list. The suite takes about 25-30 s, mostly the WFC and world tests.
+list. The suite takes about 60 s (measured 2026-11-10; it was 25-30 s on 2026-11-06), mostly
+the WFC, world and town-map tests.
 
 `docs/reference/map_generator-CLAUDE.md` is a snapshot of map_generator's CLAUDE.md as of the
 fork: its architecture notes for the site generators, state and tables still apply here. Its
