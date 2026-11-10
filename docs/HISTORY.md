@@ -333,6 +333,24 @@ gained the headless-Chromium technique (previously only in Claude's session memo
 "Working with the user" section; PLAN.md item 2 got a self-contained spec for the /poi water
 picker in place of a pointer to map_generator's `poiReviewRiver.ts`.
 
+### Town baseline hashes on arm64 (2026-11-06, branch `baseline-float-hash`)
+
+On another machine (an Ubuntu instance under OrbStack on a Mac), `npm test` failed 161 of the
+288 cases in `settlementPlanBaseline.test.ts`, and nothing else. The test hashed the plan's
+JSON with raw floats, and the last bit of `Math.sin`/`cos`/`atan2` results can differ between
+x86 and arm64 (and between Node versions). Claude's diagnosis, not checked on the arm64 machine
+at the time of writing. The hash now rounds every number to 6 decimals first (`planHash`). The
+table was re-captured on x86, where the unrounded hashes still matched the pre-item-2 ones, so
+it pins the same plans. The regenerate command in the file's header was also fixed: under
+vitest 4, `--silent=false` alone prints nothing; it needs `--silent false --reporter=verbose`.
+
+On the same branch (2026-11-10), with the baseline passing, a full `npm test` still failed 1-5
+other tests at random by timeout (campPlan, settlementPlan, settlementWater): cases that loop
+over seeds take 2-4 s alone but up to ~7.5 s when every file runs in parallel, past vitest's 5 s
+default. Each passed when run alone. Instead of raising one more per-test timeout, `vite.config.ts`
+now sets `test.testTimeout: 30_000` for the whole suite. Two full runs in a row then passed
+(1497 tests, about 60 s on this machine).
+
 ## Risks, as written during the build
 
 PLAN.md's Risks section has them as they stand now.
